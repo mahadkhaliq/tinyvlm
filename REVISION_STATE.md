@@ -16,8 +16,8 @@ s3_verified_phases: []
 - [x] phase_1_hard_routing       COMPLETE  gh_spent=0.0  note="hard argmax routing at eval implemented; _validate now reports encoder_gflops + val_branch_*_hard_fraction; smoke test confirmed 17.60 GFLOPs single-branch at eval"
 - [x] phase_2_figures            COMPLETE  gh_spent=0.0  note="figures regenerated from verified metrics.jsonl (results-tinyvlm_prev); no re-run needed"
 - [x] phase_3a_vocabulary        COMPLETE  gh_spent=0.0  note="vocabulary.json confirmed present in canonical cider_seeds run; no code change needed"
-- [x] phase_3b_clip_backbone     COMPLETE  gh_spent=4.5  note="CIDEr=85.58, BLEU4=27.15, ValAcc=51.52% after 15 epochs (batch=64, lr=3e-4, RTX 3070); hard routing confirmed 17.60 GFLOPs; results in /tmp/tinyvlm_clip_seed42/"
-- [x] phase_4_paper              COMPLETE  gh_spent=0.0  note="all edits done: routing clarification, CLIP section, Table 3 filled (CIDEr=85.58, BLEU4=27.15, Acc=51.52%), abstract updated, limitations updated"
+- [x] phase_3b_clip_backbone     COMPLETE  gh_spent=4.5  note="CIDEr=89.72, BLEU4=27.77, ValAcc=52.47% after 50 epochs (batch=64, lr=3e-4, A100 Hellbender); hard routing confirmed 17.60 GFLOPs; results in /tmp/tinyvlm_runs/clip_50ep/"
+- [x] phase_4_paper              COMPLETE  gh_spent=0.0  note="all edits done: routing clarification, CLIP section, Table 3 filled (CIDEr=89.72, BLEU4=27.77, Acc=52.47%), abstract updated (2.4× CIDEr), limitations updated"
 
 # Training command for phase_3b (run once COCO images extracted)
 
