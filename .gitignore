@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pt
+*.pt.tmp
+*.onnx
+
+# training outputs and results
+results*/
+/tmp/
+*.log
+*.jsonl
+summary.json
+config.json
+
+# COCO data (too large)
+*.zip
+train2017/
+val2017/
+annotations/
+
+# plots generated during training
+plots/
+
+# editor
+.vscode/
+.idea/
+*.swp

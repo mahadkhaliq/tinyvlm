@@ -1,0 +1,10 @@
+torch>=2.0.0
+torchvision>=0.15.0
+open_clip_torch
+Pillow
+pycocotools
+pycocoevalcap
+nltk
+matplotlib
+scipy
+tqdm
