@@ -941,17 +941,23 @@ class CocoCaptionDataset(Dataset):
     def __getitem__(
         self, idx: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        ann = self.coco.anns[self.ids[idx]]
-        img_info = self.coco.loadImgs(ann["image_id"])[0]
-        img_path = os.path.join(self.images_root, img_info["file_name"])
-        img = Image.open(img_path).convert("RGB")
-        img = self.transform(img)
-        if self.vocab is not None:
-            token_ids = self.vocab.encode(ann["caption"], self.max_length)
-        else:
-            token_ids = simple_tokenize(ann["caption"], self.max_length)
-        events = torch.zeros(2, img.shape[1] // 4, img.shape[2] // 4)
-        return img, events, token_ids
+        for attempt in range(len(self.ids)):
+            try:
+                cur_idx = (idx + attempt) % len(self.ids)
+                ann = self.coco.anns[self.ids[cur_idx]]
+                img_info = self.coco.loadImgs(ann["image_id"])[0]
+                img_path = os.path.join(self.images_root, img_info["file_name"])
+                img = Image.open(img_path).convert("RGB")
+                img = self.transform(img)
+                if self.vocab is not None:
+                    token_ids = self.vocab.encode(ann["caption"], self.max_length)
+                else:
+                    token_ids = simple_tokenize(ann["caption"], self.max_length)
+                events = torch.zeros(2, img.shape[1] // 4, img.shape[2] // 4)
+                return img, events, token_ids
+            except Exception:
+                continue
+        raise RuntimeError(f"No valid images found starting from idx={idx}")
 
 
 class SyntheticDataset(Dataset):
