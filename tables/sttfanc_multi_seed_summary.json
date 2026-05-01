@@ -1,0 +1,47 @@
+{
+  "name": "STTF+ANC (CNN)",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "per_seed": [
+    {
+      "seed": 42,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 4.200044631958008,
+      "final_val_loss": 4.200044631958008,
+      "final_val_accuracy": 0.45912864804267883,
+      "final_cider": 36.563350007202196,
+      "final_bleu4": 14.184394845599222,
+      "best_cider": 36.563350007202196,
+      "early_stopped": false
+    },
+    {
+      "seed": 43,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 4.203310966491699,
+      "final_val_loss": 4.203310966491699,
+      "final_val_accuracy": 0.4583061635494232,
+      "final_cider": 36.423164534172045,
+      "final_bleu4": 14.07310782592398,
+      "best_cider": 36.42298309291748,
+      "early_stopped": false
+    },
+    {
+      "seed": 44,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 4.205347061157227,
+      "final_val_loss": 4.205347061157227,
+      "final_val_accuracy": 0.459208607673645,
+      "final_cider": 37.12285110749616,
+      "final_bleu4": 14.35105867792629,
+      "best_cider": 37.12285110749616,
+      "early_stopped": false
+    }
+  ],
+  "n_seeds": 3
+}

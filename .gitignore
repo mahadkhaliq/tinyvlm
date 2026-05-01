@@ -26,3 +26,10 @@ plots/
 .vscode/
 .idea/
 *.swp
+neurips_2026.sty
+checklist.tex
+*.aux
+*.log
+*.out
+tinyvlm2.3.pdf
+__pycache__/

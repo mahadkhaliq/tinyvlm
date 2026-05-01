@@ -45,10 +45,8 @@ aggregate(
 )
 
 aggregate(
-    "TokenLearner",
-    [f"{BASE}/tokenlearner_baseline/seed_42_tau_0.80",
-     f"{BASE}/baselines/tokenlearner_3seed/seed_43_tau_0.80",
-     f"{BASE}/baselines/tokenlearner_3seed/seed_44_tau_0.80"],
+    "TokenLearner (matched protocol)",
+    [f"{BASE}/baselines/tokenlearner_3seed/seed_{s}_tau_0.80" for s in (42, 43, 44)],
     f"{BASE}/baselines/tokenlearner_matched_summary.json",
 )
 PY

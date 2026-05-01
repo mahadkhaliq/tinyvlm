@@ -1,0 +1,47 @@
+{
+  "name": "TokenLearner (matched protocol)",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "per_seed": [
+    {
+      "seed": 42,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 3.675459623336792,
+      "final_val_loss": 3.675459623336792,
+      "final_val_accuracy": 0.4709694981575012,
+      "final_cider": 50.8542724308578,
+      "final_bleu4": 17.51847711246794,
+      "best_cider": 50.8542724308578,
+      "early_stopped": false
+    },
+    {
+      "seed": 43,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 3.671436071395874,
+      "final_val_loss": 3.671436071395874,
+      "final_val_accuracy": 0.4721892774105072,
+      "final_cider": 56.270892642451706,
+      "final_bleu4": 18.765021263415903,
+      "best_cider": 56.270892642451706,
+      "early_stopped": false
+    },
+    {
+      "seed": 44,
+      "world_size": 4,
+      "epochs_trained": 10,
+      "best_val_loss": 3.6755640506744385,
+      "final_val_loss": 3.6755640506744385,
+      "final_val_accuracy": 0.4712502360343933,
+      "final_cider": 50.040928284032695,
+      "final_bleu4": 16.696972040170955,
+      "best_cider": 50.040928284032695,
+      "early_stopped": false
+    }
+  ],
+  "n_seeds": 3
+}
