@@ -2047,6 +2047,34 @@ def run_single(
     return trainer.train()
 
 
+def run_eval_only(cfg: Config) -> Dict[str, Any]:
+    """Load checkpoint from cfg.output_dir/seed_<S>_tau_<T>/, run val + caption
+    metrics, write eval_only_summary.json. Single-process; no DDP, no training loop."""
+    run_dir = Path(cfg.output_dir) / f"seed_{cfg.seed}_tau_{cfg.sttf_tau:.2f}"
+    if not run_dir.exists():
+        run_dir = Path(cfg.output_dir)
+    if not (run_dir / "checkpoints").exists():
+        raise FileNotFoundError(f"No checkpoints/ under {run_dir}")
+    setup_logging(cfg.log_level, log_file=run_dir / "eval_only.log")
+    logger.info("eval_only on %s", run_dir)
+    cfg = dataclasses.replace(cfg, resume=True)
+    trainer = Trainer(cfg, run_dir, rank=0, local_rank=0, world_size=1)
+    val_metrics = trainer._validate(epoch=trainer.start_epoch)
+    caption_metrics = trainer._evaluate_captions(epoch=trainer.start_epoch) or {}
+    summary = {
+        "run_dir": str(run_dir),
+        "loaded_epoch": trainer.start_epoch,
+        "seed": cfg.seed,
+        "sttf_tau": cfg.sttf_tau,
+        **val_metrics,
+        **caption_metrics,
+    }
+    out = run_dir / "eval_only_summary.json"
+    out.write_text(json.dumps(summary, indent=2))
+    logger.info("eval_only summary written to %s: %s", out, summary)
+    return summary
+
+
 def run_multi_seed(base_cfg: Config, seeds: List[int]) -> Dict[str, Any]:
     """W9: multi-seed runs with Welch t-test aggregation."""
     results: List[Dict[str, Any]] = []
@@ -2155,6 +2183,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output_dir", type=str, default=default.output_dir)
     p.add_argument("--keep_last_n_checkpoints", type=int, default=default.keep_last_n_checkpoints)
     p.add_argument("--no_resume", action="store_true", help="Disable auto-resume")
+    p.add_argument("--eval_only", action="store_true",
+                   help="Skip training; load checkpoint, run validation + caption metrics, "
+                        "write eval_only_summary.json, exit")
 
     # Reproducibility
     p.add_argument("--seed", type=int, default=default.seed)
@@ -2247,7 +2278,10 @@ def main() -> int:
         cfg = config_from_args(args)
 
     try:
-        if args.tau_sweep:
+        if args.eval_only:
+            if rank == 0:
+                run_eval_only(cfg)
+        elif args.tau_sweep:
             if rank == 0:
                 run_tau_sweep(cfg, args.tau_sweep)
         elif args.seeds:
