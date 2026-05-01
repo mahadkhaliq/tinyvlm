@@ -22,7 +22,8 @@ hard_deadline: 2026-05-06T18:00:00Z
 - [x] phase_2_reframe                COMPLETE     gh_spent=0    s3_uri=tinyvlm-finalpush/max/phase_2_6_paper/20260501/  note="paper §1 + §3 caption + §6.4 scoped 83% FLOPs claim to existing tab:ncaltech; MSR-VTT/EgoSchema added as in-progress supplementary"
 - [x] phase_3_cider_gap_fixA         DEFERRED_PRECONDITION  reason="Mahad's CLIP backbone (CIDEr 85.58 in paper, 89.72 latest from Hellbender) + GPT-2 decoder addition makes multi-token bridge obsolete; ours now leads TokenLearner by 40+ CIDEr"
 - [x] phase_3_cider_gap_fixD         DEFERRED_PRECONDITION  reason="See phase_3_cider_gap_fixA"
-- [ ] phase_5_baselines              IN_PROGRESS  budget_gh=8   started=2026-05-01T07:21Z  note="TokenLearner seed 43+44 launched in tmux 'baselines' on 4×5090 DDP; ETA 80min/seed = ~10:00Z complete. Existing TokenLearner seed 42 at /workspace/runs/tokenlearner_baseline (CIDEr 45.09)"
+- [x] phase_5_baselines              COMPLETE     gh_spent=8.5  s3_uri=tinyvlm-finalpush/max/phase_5_baselines/20260501/  note="3 TokenLearner seeds w/ matched protocol (batch_8, lambda_balance 0.01, lambda_flops 0.1): seed_42=50.85, seed_43=56.27, seed_44=50.04, mean=52.39+-3.39. Original seed_42 single-seed 45.09 was a low draw under different protocol (batch_16, lambda 0). STTF+ANC retained from earlier 3-seed runs (mean 36.70+-0.37); paired t_2=-7.40, p=0.018, d=-4.27, 95%CI[-19.85,-12.92]. Gap widened 8.4->15.7. CLIP backbone (89.72 per Mahad's REVISION_STATE.md) reverses the gap."
+- [x] phase_5_paired_stats           COMPLETE     gh_spent=0    s3_uri=(same as phase_5_baselines)  note="paired_stats.py output, Table 3 redo, prose update in §5 + §6.1"
 - [x] phase_6_token_reduction        COMPLETE     gh_spent=0    s3_uri=tinyvlm-finalpush/max/phase_2_6_paper/20260501/  note="abstract had no 84% claim; replaced 84% in §1 + §3 caption + §6.4 with verifiable 83% from tab:ncaltech; deferred new Table N because no temporal cache logging in COCO single-frame _validate"
 - [ ] phase_paper_max                PENDING      budget_gh=0   est_remote_gb=0  est_local_gb=0  note="awaits Mahad partials (sec_method_clip.tex, sec_results_clip.tex, sec_routing.tex, appendix_ablation.tex) via S3"
 
@@ -34,6 +35,7 @@ hard_deadline: 2026-05-06T18:00:00Z
 # S3 archive index
 
 - 2026-05-01T07:23Z phase_2_6_paper.tar.gz → s3test:vastai-research/ws-34754072/tinyvlm-finalpush/max/phase_2_6_paper/20260501/  (size 22 KiB; contains tinyvlm2.3.tex, REVISION_STATE_MAX.md, FINDINGS_MAX.md, paired_stats.py)
+- 2026-05-01T11:50Z phase_5_baselines.tar.gz → s3test:vastai-research/ws-34754072/tinyvlm-finalpush/max/phase_5_baselines/20260501/  (size 498 KiB; contains tinyvlm2.3.{tex,pdf}, tables/*.json, paired_stats.py, aggregate_baselines.sh, state files; sibling tokenlearner_3seed/ dir contains per-seed summary.json + train.log)
 
 
 # Environment notes

@@ -21,3 +21,36 @@ Edits to `tinyvlm/tinyvlm2.3.tex`:
 - Confirm canonical CLIP CIDEr to cite in Table 3: 85.58 (15 epoch) or 89.72 (50 epoch)?
 - Is Mahad doing 3-seed CLIP retrain, or single-seed? Phase 5 paired stats need seeds 42/43/44 matched across all rows.
 - Will Mahad push his updated `sec_method_clip.tex` / `sec_results_clip.tex` partials to S3?
+
+## 2026-05-01T11:50Z — Phase 5 (matched-seed baselines + paired stats) COMPLETE
+
+### Results
+TokenLearner with current code/protocol (batch 8, λ_balance 0.01, λ_flops 0.1):
+- seed 42 (retrained): CIDEr 50.85, BLEU4 17.52, ValAcc 47.10
+- seed 43: CIDEr 56.27, BLEU4 18.77, ValAcc 47.22
+- seed 44: CIDEr 50.04, BLEU4 16.70, ValAcc 47.13
+- mean ± std: CIDEr **52.39 ± 3.39**, BLEU4 17.66 ± 1.04, ValAcc 47.15 ± 0.06
+
+Original paper TokenLearner = 45.09 single-seed, batch 16, λ=0. Different protocol — superseded.
+
+### Paired t-test (STTF+ANC vs TokenLearner, seeds 42/43/44)
+| Metric | STTF+ANC | TokenLearner | Δ | p | Cohen's d | 95% CI |
+|---|---|---|---|---|---|---|
+| CIDEr | 36.70 ± 0.37 | 52.39 ± 3.39 | -15.69 | 0.018 | -4.27 | [-19.85, -12.92] |
+| BLEU4 | 14.20 ± 0.14 | 17.66 ± 1.04 | -3.46 | 0.037 | -2.94 | [-4.69, -2.35] |
+| ValAcc | 0.459 | 0.471 | -0.013 | 0.003 | -11.18 | [-0.014, -0.012] |
+
+CIDEr gap WIDENED from paper's 8.4 → 15.7 with corrected baseline. Story now:
+- Scratch CNN POC trails TokenLearner by 15.7 CIDEr (real, paired-significant cost of routing under under-parameterised encoder)
+- CLIP backbone (Mahad: 89.72) reverses gap by +33.2 CIDEr above TokenLearner
+
+### Paper updates
+- Table 3 row TokenLearner: 45.09 → 52.39 ± 3.39 (3 seeds), single ★ significance
+- Table 3 caption: matched-seed framing, paired-t footnote
+- Table 3 trade-off line: -8.4 → -15.7 CIDEr; new line "+33.2 vs CLIP backbone"
+- §5 stats prose: rewrite from one-sample t-test to paired t-test
+- §6.1 conclusion: paired stats; CLIP backbone framed as gap-reversal
+
+### Open
+- Mahad's CLIP CIDEr 89.72 (per his REVISION_STATE.md phase_3b) not yet reflected in committed paper (still 85.58 from earlier 15-ep run). His push pending.
+- GPT-2 decoder commit 2705f5f exists but no numbers committed yet.
