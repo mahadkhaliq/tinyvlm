@@ -1,6 +1,7 @@
 torch>=2.0.0
 torchvision>=0.15.0
 open_clip_torch
+transformers>=4.30.0
 Pillow
 pycocotools
 pycocoevalcap

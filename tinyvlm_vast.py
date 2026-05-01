@@ -106,6 +106,12 @@ try:
 except Exception:
     _OPEN_CLIP_AVAILABLE = False
 
+try:
+    from transformers import GPT2LMHeadModel, GPT2Tokenizer  # type: ignore
+    _TRANSFORMERS_AVAILABLE = True
+except Exception:
+    _TRANSFORMERS_AVAILABLE = False
+
 
 logger = logging.getLogger("tinyvlm")
 
@@ -172,6 +178,10 @@ class Config:
     clip_backbone: bool = False       # replace CNN encoders with frozen CLIP ViT-B/32
     clip_model: str = "ViT-B-32"     # open_clip model name
     clip_pretrained: str = "openai"  # open_clip pretrained weights tag
+
+    # --- GPT-2 decoder ---
+    gpt2_decoder: bool = False        # replace scratch decoder with pretrained GPT-2 small
+    gpt2_n_prefix: int = 10           # number of visual prefix tokens fed to GPT-2
 
     # --- Baseline ---
     baseline: str = "none"          # "none" = STTF+ANC, "tokenlearner" = TL baseline
@@ -386,6 +396,61 @@ def greedy_decode(
     return captions
 
 
+@torch.no_grad()
+def greedy_decode_gpt2(
+    model: Any,
+    rgb: torch.Tensor,
+    events: torch.Tensor,
+    tokenizer: Any,
+    max_new_tokens: int,
+    device: torch.device,
+) -> List[str]:
+    """Greedy autoregressive decoding using the GPT-2 decoder path.
+
+    Runs the CLIP+ANC encoder in hard-routing eval mode to get visual prefix
+    tokens, then autoregressively generates caption tokens with GPT-2.
+    """
+    raw = model.module if hasattr(model, "module") else model
+    raw.eval()
+    B = rgb.size(0)
+
+    # Encode: CLIP stem → hard-routed ANC branch → encoded [B, hidden_dim]
+    if raw.clip_stem is not None:
+        clip_feat = raw.clip_stem(rgb)
+        router_logits = raw.complexity_estimator(clip_feat)
+    else:
+        router_logits = raw.complexity_estimator(events)
+    weights = F.softmax(router_logits, dim=-1)
+    branch_idx = weights.argmax(dim=-1)
+
+    encoded = torch.zeros(B, raw.cfg.hidden_dim, device=device)
+    for k, (enc, proj) in enumerate(zip(raw.encoders, raw.projections)):
+        mask = branch_idx == k
+        if not mask.any():
+            continue
+        feat = enc(clip_feat[mask]) if raw.clip_stem is not None else enc(rgb[mask], events[mask])
+        encoded[mask] = proj(feat)
+
+    prefix = raw.prefix_adapter(encoded)   # [B, n_prefix, 768]
+
+    bos_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
+    eos_id = tokenizer.eos_token_id
+    input_ids = torch.full((B, 1), bos_id, dtype=torch.long, device=device)
+    finished = torch.zeros(B, dtype=torch.bool, device=device)
+
+    for _ in range(max_new_tokens - 1):
+        tok_emb = raw.decoder.gpt2.transformer.wte(input_ids)             # [B, t, 768]
+        combined = torch.cat([prefix, tok_emb], dim=1)                    # [B, n_prefix+t, 768]
+        next_tok = raw.decoder.gpt2(inputs_embeds=combined).logits[:, -1, :].argmax(dim=-1)  # [B]
+        next_tok = torch.where(finished, torch.full_like(next_tok, eos_id), next_tok)
+        input_ids = torch.cat([input_ids, next_tok.unsqueeze(1)], dim=1)
+        finished |= next_tok == eos_id
+        if finished.all():
+            break
+
+    return tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+
+
 def compute_caption_metrics(
     hypotheses: List[str],
     references: List[List[str]],
@@ -567,6 +632,55 @@ class ConditionalTransformer(nn.Module):
         return self.out(out)
 
 
+class VisualPrefixAdapter(nn.Module):
+    """Projects ANC visual features [B, in_dim] → GPT-2 prefix embeddings [B, n_prefix, gpt2_dim]."""
+
+    def __init__(self, in_dim: int, gpt2_dim: int = 768, n_prefix: int = 10, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.n_prefix = n_prefix
+        self.mlp = nn.Sequential(
+            nn.Linear(in_dim, gpt2_dim * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(gpt2_dim * 2, gpt2_dim * n_prefix),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.mlp(x).view(x.size(0), self.n_prefix, -1)
+
+
+class GPT2CaptionDecoder(nn.Module):
+    """Pretrained GPT-2 small with visual prefix injection (ClipCap-style).
+
+    Teacher-forcing forward: concatenates n_prefix visual prefix tokens in front
+    of the caption token embeddings and returns logits for the caption positions
+    only, keeping the same [B, T, vocab_size] shape as ConditionalTransformer.
+    """
+
+    GPT2_DIM: int = 768       # GPT-2 small hidden dimension
+    VOCAB_SIZE: int = 50257   # GPT-2 vocabulary size
+
+    def __init__(self) -> None:
+        super().__init__()
+        if not _TRANSFORMERS_AVAILABLE:
+            raise RuntimeError("transformers is not installed. Run `pip install transformers`.")
+        self.gpt2 = GPT2LMHeadModel.from_pretrained("gpt2")
+
+    def forward(self, prefix_embeds: torch.Tensor, input_ids: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            prefix_embeds: [B, n_prefix, 768] — visual prefix from VisualPrefixAdapter
+            input_ids:     [B, T] — GPT-2 token IDs (BOS + caption tokens, padded)
+        Returns:
+            logits: [B, T, 50257] — one logit vector per caption token position
+        """
+        n_prefix = prefix_embeds.size(1)
+        token_embeds = self.gpt2.transformer.wte(input_ids)           # [B, T, 768]
+        combined = torch.cat([prefix_embeds, token_embeds], dim=1)    # [B, n_prefix+T, 768]
+        out = self.gpt2(inputs_embeds=combined)
+        return out.logits[:, n_prefix:, :]                             # [B, T, 50257]
+
+
 class AdaptiveNeuralCompression(nn.Module):
     """STTF + ANC unified model. Shape-compatible with tiny_vlm_anc.onnx export.
 
@@ -633,14 +747,25 @@ class AdaptiveNeuralCompression(nn.Module):
             self._head_flops = [enc.flops for enc in self.encoders]
 
         self.router = GumbelSoftmaxRouter(temperature=cfg.router_temperature)
-        self.decoder = ConditionalTransformer(
-            dim=cfg.hidden_dim,
-            vocab_size=cfg.vocab_size,
-            max_length=cfg.max_length,
-            nhead=cfg.num_heads,
-            num_layers=cfg.num_decoder_layers,
-            dropout=cfg.dropout,
-        )
+
+        if cfg.gpt2_decoder:
+            self.prefix_adapter: Optional[VisualPrefixAdapter] = VisualPrefixAdapter(
+                in_dim=cfg.hidden_dim,
+                gpt2_dim=GPT2CaptionDecoder.GPT2_DIM,
+                n_prefix=cfg.gpt2_n_prefix,
+                dropout=cfg.dropout,
+            )
+            self.decoder: Any = GPT2CaptionDecoder()
+        else:
+            self.prefix_adapter = None
+            self.decoder = ConditionalTransformer(
+                dim=cfg.hidden_dim,
+                vocab_size=cfg.vocab_size,
+                max_length=cfg.max_length,
+                nhead=cfg.num_heads,
+                num_layers=cfg.num_decoder_layers,
+                dropout=cfg.dropout,
+            )
 
     def _encoder_flops(self, k: int) -> float:
         return self._head_flops[k]
@@ -683,7 +808,11 @@ class AdaptiveNeuralCompression(nn.Module):
                 encoded[mask] = proj(feat)
                 comp_cost[mask] = self._encoder_flops(k)
 
-        token_logits = self.decoder(encoded, text_tokens)
+        if self.prefix_adapter is not None:
+            prefix = self.prefix_adapter(encoded)
+            token_logits = self.decoder(prefix, text_tokens)
+        else:
+            token_logits = self.decoder(encoded, text_tokens)
         return token_logits, comp_cost, router_logits, weights
 
 
@@ -803,13 +932,14 @@ class TokenLearnerBaseline(nn.Module):
 
 
 def caption_ce_loss(
-    pred_logits: torch.Tensor, target_tokens: torch.Tensor, label_smoothing: float
+    pred_logits: torch.Tensor, target_tokens: torch.Tensor, label_smoothing: float,
+    pad_id: int = 0,
 ) -> torch.Tensor:
     """Shift-by-one cross-entropy with label smoothing and PAD masking."""
     _, _, V = pred_logits.shape
     pred = pred_logits[:, :-1, :].contiguous().view(-1, V)
     tgt = target_tokens[:, 1:].contiguous().view(-1)
-    return F.cross_entropy(pred, tgt, ignore_index=0, label_smoothing=label_smoothing)
+    return F.cross_entropy(pred, tgt, ignore_index=pad_id, label_smoothing=label_smoothing)
 
 
 def flops_penalty(comp_cost: torch.Tensor, target_budget: float) -> torch.Tensor:
@@ -837,10 +967,10 @@ def load_balance_loss(weights: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
-def token_accuracy(pred_logits: torch.Tensor, target_tokens: torch.Tensor) -> float:
+def token_accuracy(pred_logits: torch.Tensor, target_tokens: torch.Tensor, pad_id: int = 0) -> float:
     preds = pred_logits[:, :-1, :].argmax(dim=-1)
     targets = target_tokens[:, 1:]
-    mask = targets != 0
+    mask = targets != pad_id
     if mask.sum() == 0:
         return 0.0
     return ((preds == targets) & mask).sum().item() / mask.sum().item()
@@ -890,6 +1020,7 @@ class CocoCaptionDataset(Dataset):
         max_length: int = 64,
         vocab: Optional["Vocabulary"] = None,
         clip_preprocess: Optional[Callable] = None,
+        gpt2_tokenizer: Optional[Any] = None,
     ) -> None:
         if not _COCO_AVAILABLE:
             raise RuntimeError(
@@ -908,6 +1039,7 @@ class CocoCaptionDataset(Dataset):
         self.images_root = images_root
         self.max_length = max_length
         self.vocab = vocab
+        self.gpt2_tokenizer = gpt2_tokenizer
         # When a CLIP preprocess callable is provided, use it instead of the
         # standard ImageNet normalization (CLIP has its own mean/std).
         if clip_preprocess is not None:
@@ -949,7 +1081,16 @@ class CocoCaptionDataset(Dataset):
                 img_path = os.path.join(self.images_root, img_info["file_name"])
                 img = Image.open(img_path).convert("RGB")
                 img = self.transform(img)
-                if self.vocab is not None:
+                if self.gpt2_tokenizer is not None:
+                    enc = self.gpt2_tokenizer(
+                        ann["caption"],
+                        max_length=self.max_length,
+                        padding="max_length",
+                        truncation=True,
+                        return_tensors="pt",
+                    )
+                    token_ids = enc.input_ids.squeeze(0)
+                elif self.vocab is not None:
                     token_ids = self.vocab.encode(ann["caption"], self.max_length)
                 else:
                     token_ids = simple_tokenize(ann["caption"], self.max_length)
@@ -987,19 +1128,21 @@ def build_datasets(
     cfg: Config,
     vocab: Optional[Vocabulary] = None,
     clip_preprocess: Optional[Callable] = None,
+    gpt2_tokenizer: Optional[Any] = None,
 ) -> Tuple[Dataset, Dataset]:
     if cfg.smoke_test:
         logger.info("Smoke test mode: building synthetic dataset (%d samples)", cfg.smoke_test_size)
         full = SyntheticDataset(
             size=cfg.smoke_test_size,
             max_length=cfg.max_length,
-            vocab_size=cfg.vocab_size,
+            vocab_size=cfg.vocab_size if not cfg.gpt2_decoder else GPT2CaptionDecoder.VOCAB_SIZE,
         )
     else:
         logger.info("Loading COCO from %s", cfg.coco_imgs)
         full = CocoCaptionDataset(
             cfg.coco_imgs, cfg.coco_anns, cfg.max_length,
             vocab=vocab, clip_preprocess=clip_preprocess,
+            gpt2_tokenizer=gpt2_tokenizer,
         )
 
     n_val = max(1, int(len(full) * cfg.val_fraction))
@@ -1012,7 +1155,7 @@ def build_datasets(
 
 def build_vocabulary(cfg: Config, run_dir: Path) -> Optional[Vocabulary]:
     """Build vocabulary from all COCO captions; save to run_dir for reproducibility."""
-    if cfg.smoke_test:
+    if cfg.smoke_test or cfg.gpt2_decoder:
         return None
     vocab_path = run_dir / "vocabulary.json"
     if vocab_path.exists():
@@ -1292,6 +1435,18 @@ class Trainer:
         # same model initialisation seed.
         set_seed(cfg.seed + rank, cfg.deterministic)
 
+        # ── GPT-2 tokenizer (when gpt2_decoder=True, replaces Vocabulary) ────
+        self.gpt2_tokenizer: Optional[Any] = None
+        self.pad_id: int = 0   # Vocabulary.PAD; overridden below for GPT-2
+        if cfg.gpt2_decoder:
+            if not _TRANSFORMERS_AVAILABLE:
+                raise RuntimeError("transformers is not installed. Run `pip install transformers`.")
+            self.gpt2_tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+            self.gpt2_tokenizer.pad_token = self.gpt2_tokenizer.eos_token
+            self.pad_id = self.gpt2_tokenizer.pad_token_id
+            if self.is_main:
+                logger.info("GPT-2 tokenizer loaded (pad_token_id=%d)", self.pad_id)
+
         # ── Vocabulary (rank 0 builds/saves; all ranks load) ──────────────────
         if self.is_main:
             self.vocab = build_vocabulary(cfg, run_dir)
@@ -1301,7 +1456,7 @@ class Trainer:
         if world_size > 1:
             import torch.distributed as dist
             dist.barrier()
-            if not self.is_main and not cfg.smoke_test:
+            if not self.is_main and not cfg.smoke_test and not cfg.gpt2_decoder:
                 vocab_path = run_dir / "vocabulary.json"
                 if vocab_path.exists():
                     self.vocab = Vocabulary.load(vocab_path, max_size=cfg.vocab_size)
@@ -1327,7 +1482,10 @@ class Trainer:
             if cfg.clip_backbone and hasattr(self.raw_model, "clip_stem") and self.raw_model.clip_stem is not None
             else None
         )
-        train_set, val_set = build_datasets(cfg, vocab=self.vocab, clip_preprocess=_clip_pre)
+        train_set, val_set = build_datasets(
+            cfg, vocab=self.vocab, clip_preprocess=_clip_pre,
+            gpt2_tokenizer=self.gpt2_tokenizer,
+        )
 
         if world_size > 1:
             from torch.utils.data.distributed import DistributedSampler
@@ -1490,7 +1648,7 @@ class Trainer:
     def _compute_losses(
         self, pred_logits: torch.Tensor, comp_cost: torch.Tensor, weights: torch.Tensor, tokens: torch.Tensor
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
-        ce = caption_ce_loss(pred_logits, tokens, self.cfg.label_smoothing)
+        ce = caption_ce_loss(pred_logits, tokens, self.cfg.label_smoothing, pad_id=self.pad_id)
         f_pen = flops_penalty(comp_cost, self.cfg.target_budget)
         ent = router_entropy(weights)
         balance = load_balance_loss(weights)
@@ -1554,7 +1712,7 @@ class Trainer:
 
             self.utilization.update(weights)
             total_loss += float(loss.detach())
-            total_acc += token_accuracy(logits_tok, tokens)
+            total_acc += token_accuracy(logits_tok, tokens, pad_id=self.pad_id)
             n_batches += 1
 
             if self.graceful.should_exit:
@@ -1576,9 +1734,10 @@ class Trainer:
     def _evaluate_captions(self, epoch: int) -> Dict[str, float]:
         """Generate captions on the val set and compute CIDEr + BLEU-4.
 
-        Only runs on rank 0; skipped for smoke tests or when vocab is missing.
+        Only runs on rank 0; skipped for smoke tests or when both vocab and
+        gpt2_tokenizer are absent.
         """
-        if not self.is_main or self.vocab is None:
+        if not self.is_main or (self.vocab is None and self.gpt2_tokenizer is None):
             return {}
         logger.info("epoch %d: running caption evaluation (CIDEr/BLEU-4)...", epoch)
 
@@ -1631,10 +1790,16 @@ class Trainer:
         for rgb, events, _ in eval_loader:
             rgb = rgb.to(self.device)
             events = events.to(self.device)
-            caps = greedy_decode(
-                self.model, rgb, events,
-                self.cfg.max_length, self.vocab, self.device
-            )
+            if self.gpt2_tokenizer is not None:
+                caps = greedy_decode_gpt2(
+                    self.model, rgb, events,
+                    self.gpt2_tokenizer, self.cfg.max_length, self.device,
+                )
+            else:
+                caps = greedy_decode(
+                    self.model, rgb, events,
+                    self.cfg.max_length, self.vocab, self.device,
+                )
             for cap in caps:
                 hypotheses.append(cap)
                 references.append(ref_map.get(pos, [""]))
@@ -1668,7 +1833,7 @@ class Trainer:
             logits_tok, comp_cost, _, weights = self.model(rgb, events, tokens)
             loss, _ = self._compute_losses(logits_tok, comp_cost, weights, tokens)
             total_loss += float(loss)
-            total_acc += token_accuracy(logits_tok, tokens)
+            total_acc += token_accuracy(logits_tok, tokens, pad_id=self.pad_id)
             total_comp_cost += float(comp_cost.mean())
             val_util.update(weights)
             n_batches += 1
@@ -1961,6 +2126,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Use frozen CLIP ViT-B/32 stem instead of CNN encoders")
     p.add_argument("--clip_model", type=str, default=default.clip_model)
     p.add_argument("--clip_pretrained", type=str, default=default.clip_pretrained)
+    p.add_argument("--gpt2_decoder", action="store_true",
+                   help="Replace scratch decoder with pretrained GPT-2 small (requires --clip_backbone)")
+    p.add_argument("--gpt2_n_prefix", type=int, default=default.gpt2_n_prefix,
+                   help="Number of visual prefix tokens fed to GPT-2")
 
     # Training
     p.add_argument("--epochs", type=int, default=default.epochs)
@@ -2048,6 +2217,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         clip_backbone=args.clip_backbone,
         clip_model=args.clip_model,
         clip_pretrained=args.clip_pretrained,
+        gpt2_decoder=args.gpt2_decoder,
+        gpt2_n_prefix=args.gpt2_n_prefix,
         eval_cider_freq=args.eval_cider_freq,
         export_onnx=not args.no_onnx,
         tensorboard=not args.no_tensorboard,
