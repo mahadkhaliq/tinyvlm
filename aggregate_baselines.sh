@@ -49,6 +49,12 @@ aggregate(
     [f"{BASE}/baselines/tokenlearner_3seed/seed_{s}_tau_0.80" for s in (42, 43, 44)],
     f"{BASE}/baselines/tokenlearner_matched_summary.json",
 )
+
+aggregate(
+    "STTF+ANC (CLIP, matched protocol)",
+    [f"{BASE}/clip_3seed/seed_{s}_tau_0.80" for s in (42, 43, 44)],
+    f"{BASE}/clip_3seed/multi_seed_summary.json",
+)
 PY
 
 echo

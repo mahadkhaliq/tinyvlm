@@ -1,0 +1,47 @@
+{
+  "name": "STTF+ANC (CLIP, matched protocol)",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "per_seed": [
+    {
+      "seed": 42,
+      "world_size": 4,
+      "epochs_trained": 15,
+      "best_val_loss": 3.5787532329559326,
+      "final_val_loss": 3.5787532329559326,
+      "final_val_accuracy": 0.5079990029335022,
+      "final_cider": 82.35102826619237,
+      "final_bleu4": 26.095330677116763,
+      "best_cider": 82.35102826619237,
+      "early_stopped": false
+    },
+    {
+      "seed": 43,
+      "world_size": 4,
+      "epochs_trained": 15,
+      "best_val_loss": 3.580360174179077,
+      "final_val_loss": 3.580360174179077,
+      "final_val_accuracy": 0.5078895092010498,
+      "final_cider": 83.64820912817997,
+      "final_bleu4": 25.95163646137058,
+      "best_cider": 83.64820912817997,
+      "early_stopped": false
+    },
+    {
+      "seed": 44,
+      "world_size": 4,
+      "epochs_trained": 15,
+      "best_val_loss": 3.586399555206299,
+      "final_val_loss": 3.586399555206299,
+      "final_val_accuracy": 0.5069698095321655,
+      "final_cider": 82.07096732924131,
+      "final_bleu4": 26.30040923101116,
+      "best_cider": 82.07096732924131,
+      "early_stopped": false
+    }
+  ],
+  "n_seeds": 3
+}
