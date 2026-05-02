@@ -1556,6 +1556,7 @@ class Trainer:
 
         self.start_epoch = 0
         self.best_val_loss = float("inf")
+        self.best_cider = 0.0
         if cfg.resume:
             self._maybe_resume()
 
@@ -1892,17 +1893,27 @@ class Trainer:
             self._log_epoch(epoch, "val", val_metrics, time.time() - t0)
 
             # Caption metrics every eval_cider_freq epochs (rank 0 only).
+            caption_metrics: Dict[str, float] = {}
             freq = self.cfg.eval_cider_freq
             if freq > 0 and (epoch + 1) % freq == 0:
                 caption_metrics = self._evaluate_captions(epoch)
                 if caption_metrics:
                     self._log_epoch(epoch, "caption", caption_metrics, 0.0)
 
-            # Early stopping decision is made on rank 0 and broadcast to all.
+            # Early stopping + best-checkpoint decision (rank 0).
+            # GPT-2 mode: best.pt tracks peak CIDEr; early stopping still on val loss.
+            # Default mode: both track val loss (unchanged behaviour).
             if self.is_main:
-                improved = self.early_stop.step(val_metrics["loss"])
-                if improved:
-                    self.best_val_loss = val_metrics["loss"]
+                cider_now = caption_metrics.get("cider") if caption_metrics else None
+                if self.cfg.gpt2_decoder and cider_now is not None:
+                    improved = float(cider_now) > self.best_cider
+                    if improved:
+                        self.best_cider = float(cider_now)
+                    self.early_stop.step(val_metrics["loss"])
+                else:
+                    improved = self.early_stop.step(val_metrics["loss"])
+                    if improved:
+                        self.best_val_loss = val_metrics["loss"]
             else:
                 improved = False
 
