@@ -54,3 +54,34 @@ CIDEr gap WIDENED from paper's 8.4 → 15.7 with corrected baseline. Story now:
 ### Open
 - Mahad's CLIP CIDEr 89.72 (per his REVISION_STATE.md phase_3b) not yet reflected in committed paper (still 85.58 from earlier 15-ep run). His push pending.
 - GPT-2 decoder commit 2705f5f exists but no numbers committed yet.
+
+## 2026-05-02T05:08Z — Phase CLIP (matched 3-seed CLIP+STTF+ANC) COMPLETE
+
+### Results
+CLIP+STTF+ANC, 3 seeds, 15 epochs, 4×5090 DDP, batch 4 per rank:
+- seed 42: CIDEr 82.35, BLEU4 26.10, ValAcc 50.80
+- seed 43: CIDEr 83.65, BLEU4 25.95, ValAcc 50.79
+- seed 44: CIDEr 82.07, BLEU4 26.30, ValAcc 50.70
+- mean ± std: CIDEr **82.69 ± 0.84**, BLEU4 26.12 ± 0.18, ValAcc 50.76% ± 0.06%
+
+Tight std (0.84) — indicates well-converged, low-variance training. Compare:
+- TokenLearner: CIDEr std 3.39 (4× wider)
+- CNN-POC STTF+ANC: CIDEr std 0.37
+
+### Paired t-test (CLIP+STTF+ANC vs TokenLearner, matched 3 seeds)
+| Metric | CLIP+STTF+ANC | TokenLearner | Δ | p | Cohen's d | 95% CI |
+|---|---|---|---|---|---|---|
+| CIDEr | 82.69 ± 0.84 | 52.39 ± 3.39 | **+30.30** | 0.002 | **+11.90** | [+27.4, +32.0] |
+| BLEU4 | 26.12 ± 0.18 | 17.66 ± 1.04 | +8.46 | 0.007 | +6.97 | [+7.2, +9.6] |
+| ValAcc | 0.508 | 0.471 | +0.036 | 0.0001 | +47.44 | [+0.036, +0.037] |
+
+Massive effect sizes. Headline secured.
+
+### Paper updates (tinyvlm2.4.tex)
+- Abstract: 89.72 → 82.69 ± 0.84 (matched 3 seeds), 89.72 retained as 50-ep peak ref
+- Table 3: bold row "STTF+ANC (Ours, CLIP, 3 seeds)" with mean ± std and paired-test markers
+- §5 Headline subsection: full paired stats; "$+30.30$ above TokenLearner"
+- §6.1 conclusion + §6.4 limitations: same reframe
+
+### Cost
+~12.5 GPU-h on vast 4×5090 ($31). Total Mahbub-lane spend so far: ~21.5 GPU-h ($54).
