@@ -121,7 +121,7 @@ Our contributions are summarized as follows:
 
 \item We provide a \textbf{matched-seed paired comparison} against TokenLearner --- the strongest open-protocol baseline at this FLOPs budget --- and a 21M-parameter scratch CNN proof-of-concept that reproduces the routing mechanics in isolation, demonstrating that the framework's gains derive from the routing+STTF design rather than backbone strength alone.
 
-\item We provide \textbf{on-device evaluation} on edge hardware (Snapdragon 888, Jetson Nano), demonstrating real-world latency and power improvements (Table 5).
+\item We provide \textbf{on-device evaluation} on edge hardware (Snapdragon 888, Jetson Nano), demonstrating real-world latency and power improvements (Table~\ref{tab:ondevice}).
 \end{itemize}
 
 Our findings suggest that pairing structured, input-aware compression with a strong pretrained visual backbone is the practical path to deploying competitive VLMs on edge hardware --- neither component alone is sufficient.
@@ -281,13 +281,13 @@ Unless otherwise noted, Tables~\ref{tab:sttf_tau}--\ref{tab:main} report CNN-bac
 We train for 10 epochs using AdamW~\cite{loshchilov2019adamw} with:
 learning rate = $1 \times 10^{-4}$,
 weight decay = $0.05$,
-global batch size = 64 (16 per GPU $\times$ 4 GPUs),
+global batch size = 64,
 cosine learning rate scheduler with 1-epoch warmup,
 gradient clipping at norm 1.0,
 dropout $p=0.2$ in all encoders and the transformer decoder,
 and label smoothing $\epsilon=0.1$.
 We use early stopping with patience 3 on validation loss.
-Loss weights: $\lambda_1=0.01$ (FLOPs), $\lambda_3=0.5$ (load balance).
+Loss weights: $\lambda_1=0.01$ (token), $\lambda_2=0.01$ (FLOPs), $\lambda_3=0.5$ (load balance).
 All experiments are repeated over three random seeds and reported as mean $\pm$ standard deviation.
 For the CLIP+GPT-2 variant, we use $lr{=}2{\times}10^{-5}$ (AdamW), batch size 32, and save the checkpoint with peak CIDEr (rather than lowest val loss) as the best model.
 
@@ -295,13 +295,13 @@ For the CLIP+GPT-2 variant, we use $lr{=}2{\times}10^{-5}$ (AdamW), batch size 3
 We apply random cropping, horizontal flipping, color jittering for images,
 and event stream jittering for DVS datasets.
 \paragraph{Hardware.}
-Training is performed on 4$\times$ NVIDIA A100 GPUs.
+Training is performed on a single NVIDIA A100 GPU (80~GB).
 Inference is evaluated on:
 (i) Snapdragon 888 (mobile SoC),
 (ii) Jetson Nano (edge GPU).
 
 \paragraph{Evaluation Protocol.}
-All results are averaged over 3 random seeds and reported as mean $\pm$ standard deviation.
+CIDEr-D (pycocoevalcap) and BLEU-4 (NLTK) are computed on the Karpathy val split. For matched-seed comparisons, paired $t$-tests are applied across seeds \{42, 43, 44\}; single-seed baselines are reported for reference only.
 
 \subsection{STTF Ablation: $\tau$ Sensitivity Study}
 
@@ -665,7 +665,7 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %\newpage
-\input{checklist.tex}
+%\input{checklist.tex}  % NeurIPS reproducibility checklist — attach separately
 
 
 \end{document}
