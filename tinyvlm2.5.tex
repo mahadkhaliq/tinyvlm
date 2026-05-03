@@ -673,11 +673,11 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 
 \item \textbf{Claims.}
 \textit{Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?}\\
-\textbf{Yes.} All quantitative claims (CIDEr, BLEU-4, GFLOPs, DVS128 accuracy) in the abstract and introduction correspond to entries in Tables~\ref{tab:captioning}--\ref{tab:ondevice} and are supported by 3-seed experiments with paired $t$-tests.
+\textbf{Yes.} All quantitative claims (CIDEr, BLEU-4, GFLOPs, DVS128 accuracy) in the abstract and introduction correspond to entries in Tables~\ref{tab:main} and~\ref{tab:ondevice} and are supported by 3-seed experiments with paired $t$-tests.
 
 \item \textbf{Limitations.}
 \textit{Does the paper discuss the limitations of the work performed by the authors?}\\
-\textbf{Yes.} A dedicated Limitations paragraph (Section~\ref{sec:conclusion}) identifies the CIDEr gap of the CLIP+GPT-2 path, fixed 2×2 patch granularity of STTF, and the absence of full real-world event-RGB synchronization.
+\textbf{Yes.} A dedicated Limitations paragraph (Section~6) identifies the CIDEr gap of the CLIP+GPT-2 path, fixed 2$\times$2 patch granularity of STTF, and the absence of full real-world event-RGB synchronization.
 
 \item \textbf{Theory Assumptions and Proofs.}
 \textit{For each theoretical result, does the paper provide the full set of assumptions and a complete proof?}\\
@@ -697,7 +697,7 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 
 \item \textbf{Experiment Statistical Significance.}
 \textit{Does the paper report error bars and/or statistical significance tests appropriately?}\\
-\textbf{Yes.} All multi-seed results report mean~$\pm$~std. Comparisons against TokenLearner use paired Welch $t$-tests with Cohen's $d$ effect sizes and 95\% confidence intervals (Table~\ref{tab:captioning}).
+\textbf{Yes.} All multi-seed results report mean~$\pm$~std. Comparisons against TokenLearner use paired Welch $t$-tests with Cohen's $d$ effect sizes and 95\% confidence intervals (Table~\ref{tab:main}).
 
 \item \textbf{Experiments Compute Resources.}
 \textit{Does the paper provide sufficient information on the computational resources used?}\\
@@ -709,7 +709,7 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 
 \item \textbf{Broader Impacts.}
 \textit{Does the paper discuss both positive and negative societal impacts?}\\
-\textbf{Yes.} Appendix~B (Broader Impact) addresses positive applications (assistive technology, healthcare, disaster response) and risks (surveillance, privacy, safety in autonomous systems, aggregate energy consumption).
+\textbf{Yes.} Appendix~A (Broader Impact) addresses positive applications (assistive technology, healthcare, disaster response) and risks (surveillance, privacy, safety in autonomous systems, aggregate energy consumption).
 
 \item \textbf{Safeguards.}
 \textit{Does the paper describe safeguards for responsible release of data or models with potential for misuse?}\\
@@ -729,7 +729,7 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 
 \item \textbf{Potentially Harmful Insights, Methodologies, and Applications.}
 \textit{Does the submission describe potential harms and safeguards for potentially harmful applications?}\\
-\textbf{NA.} No novel attack vectors or tools with significant misuse potential are introduced. Broader societal risks are discussed in Appendix~B.
+\textbf{NA.} No novel attack vectors or tools with significant misuse potential are introduced. Broader societal risks are discussed in Appendix~A.
 
 \end{enumerate}
 
