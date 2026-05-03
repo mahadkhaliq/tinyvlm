@@ -500,23 +500,20 @@ def compute_caption_metrics(
     except Exception as e:
         logger.warning("BLEU-4 via nltk failed (%s); skipping BLEU-4.", e)
 
-    # ── METEOR via pycocoevalcap ──────────────────────────────────────────────
+    # ── METEOR via nltk (pure Python, no Java required) ──────────────────────
     try:
-        from pycocoevalcap.meteor.meteor import Meteor  # type: ignore
+        from nltk.translate.meteor_score import meteor_score as _nltk_meteor  # type: ignore
+        import nltk  # type: ignore
 
-        gts_m = {i: refs for i, refs in enumerate(references)}
-        res_m = {i: [h] for i, h in enumerate(hypotheses)}
-        try:
-            meteor_scorer = Meteor()
-            score, _ = meteor_scorer.compute_score(gts_m, res_m)
-        except Exception:
-            gts_m = {i: [{"caption": r} for r in refs] for i, refs in enumerate(references)}
-            res_m = {i: [{"caption": h}] for i, h in enumerate(hypotheses)}
-            meteor_scorer = Meteor()
-            score, _ = meteor_scorer.compute_score(gts_m, res_m)
-        results["meteor"] = float(score) * 100
+        nltk.download("wordnet", quiet=True)
+        nltk.download("omw-1.4", quiet=True)
+        scores = [
+            _nltk_meteor([ref.split() for ref in refs], hyp.split())
+            for refs, hyp in zip(references, hypotheses)
+        ]
+        results["meteor"] = float(sum(scores) / len(scores)) * 100
     except Exception as e:
-        logger.warning("METEOR via pycocoevalcap failed (%s); skipping METEOR.", e)
+        logger.warning("METEOR via nltk failed (%s); skipping METEOR.", e)
 
     return results
 
