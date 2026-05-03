@@ -187,6 +187,10 @@ class Config:
     baseline: str = "none"          # "none" = STTF+ANC, "tokenlearner" = TL baseline
     tokenlearner_num_tokens: int = 8  # number of learned tokens S
 
+    # --- Ablations ---
+    no_anc: bool = False  # S5: single fixed encoder, no routing (iso-backbone ablation)
+    eval_only: bool = False  # S1: load checkpoint, eval once, exit (no training)
+
     # --- Evaluation ---
     eval_cider_freq: int = 5   # compute CIDEr/BLEU-4 every N epochs (0 = final only)
 
@@ -496,6 +500,24 @@ def compute_caption_metrics(
     except Exception as e:
         logger.warning("BLEU-4 via nltk failed (%s); skipping BLEU-4.", e)
 
+    # ── METEOR via pycocoevalcap ──────────────────────────────────────────────
+    try:
+        from pycocoevalcap.meteor.meteor import Meteor  # type: ignore
+
+        gts_m = {i: refs for i, refs in enumerate(references)}
+        res_m = {i: [h] for i, h in enumerate(hypotheses)}
+        try:
+            meteor_scorer = Meteor()
+            score, _ = meteor_scorer.compute_score(gts_m, res_m)
+        except Exception:
+            gts_m = {i: [{"caption": r} for r in refs] for i, refs in enumerate(references)}
+            res_m = {i: [{"caption": h}] for i, h in enumerate(hypotheses)}
+            meteor_scorer = Meteor()
+            score, _ = meteor_scorer.compute_score(gts_m, res_m)
+        results["meteor"] = float(score) * 100
+    except Exception as e:
+        logger.warning("METEOR via pycocoevalcap failed (%s); skipping METEOR.", e)
+
     return results
 
 
@@ -697,30 +719,39 @@ class AdaptiveNeuralCompression(nn.Module):
         if cfg.clip_backbone:
             self.clip_stem = CLIPStemEncoder(cfg.clip_model, cfg.clip_pretrained)
             clip_dim = CLIPStemEncoder.OUT_DIM  # 512
-            # Three heterogeneous MLP heads operating on CLIP features.
-            # Capacity difference comes from hidden width, preserving routing incentive.
-            self.encoders = nn.ModuleList([
-                nn.Sequential(nn.Linear(clip_dim, 128), nn.GELU(), nn.Dropout(cfg.dropout)),
-                nn.Sequential(nn.Linear(clip_dim, 256), nn.GELU(), nn.Dropout(cfg.dropout)),
-                nn.Sequential(nn.Linear(clip_dim, 384), nn.GELU(), nn.Dropout(cfg.dropout)),
-            ])
-            # Approximate FLOPs for each MLP head (clip stem FLOPs shared, so only
-            # head FLOPs differ; we report clip_stem FLOPs + head FLOPs for comp_cost).
-            self._head_flops = [
-                CLIPStemEncoder.FLOPS + 128 * clip_dim * 2,
-                CLIPStemEncoder.FLOPS + 256 * clip_dim * 2,
-                CLIPStemEncoder.FLOPS + 384 * clip_dim * 2,
-            ]
-            head_dims = [128, 256, 384]
-            self.projections = nn.ModuleList([
-                nn.Linear(d, cfg.hidden_dim) for d in head_dims
-            ])
-            # Complexity estimator operates on the 512-d CLIP CLS token.
-            self.complexity_estimator = nn.Sequential(
-                nn.Linear(clip_dim, 64),
-                nn.GELU(),
-                nn.Linear(64, len(self.encoders)),
-            )
+
+            if cfg.no_anc:
+                # Single fixed 384-d MLP projection, no router — S5 iso-backbone ablation.
+                self.encoders = nn.ModuleList([
+                    nn.Sequential(nn.Linear(clip_dim, cfg.hidden_dim), nn.GELU(), nn.Dropout(cfg.dropout))
+                ])
+                self.projections = nn.ModuleList([nn.Linear(cfg.hidden_dim, cfg.hidden_dim)])
+                self._head_flops = [CLIPStemEncoder.FLOPS]
+                self.complexity_estimator = None
+            else:
+                # Three heterogeneous MLP heads operating on CLIP features.
+                # Capacity difference comes from hidden width, preserving routing incentive.
+                self.encoders = nn.ModuleList([
+                    nn.Sequential(nn.Linear(clip_dim, 128), nn.GELU(), nn.Dropout(cfg.dropout)),
+                    nn.Sequential(nn.Linear(clip_dim, 256), nn.GELU(), nn.Dropout(cfg.dropout)),
+                    nn.Sequential(nn.Linear(clip_dim, 384), nn.GELU(), nn.Dropout(cfg.dropout)),
+                ])
+                # Approximate FLOPs for each MLP head (clip stem FLOPs shared).
+                self._head_flops = [
+                    CLIPStemEncoder.FLOPS + 128 * clip_dim * 2,
+                    CLIPStemEncoder.FLOPS + 256 * clip_dim * 2,
+                    CLIPStemEncoder.FLOPS + 384 * clip_dim * 2,
+                ]
+                head_dims = [128, 256, 384]
+                self.projections = nn.ModuleList([
+                    nn.Linear(d, cfg.hidden_dim) for d in head_dims
+                ])
+                # Complexity estimator operates on the 512-d CLIP CLS token.
+                self.complexity_estimator = nn.Sequential(
+                    nn.Linear(clip_dim, 64),
+                    nn.GELU(),
+                    nn.Linear(64, len(self.encoders)),
+                )
         else:
             self.encoders = nn.ModuleList(
                 [
@@ -746,7 +777,9 @@ class AdaptiveNeuralCompression(nn.Module):
             )
             self._head_flops = [enc.flops for enc in self.encoders]
 
-        self.router = GumbelSoftmaxRouter(temperature=cfg.router_temperature)
+        self.router: Optional[GumbelSoftmaxRouter] = (
+            None if cfg.no_anc else GumbelSoftmaxRouter(temperature=cfg.router_temperature)
+        )
 
         if cfg.gpt2_decoder:
             self.prefix_adapter: Optional[VisualPrefixAdapter] = VisualPrefixAdapter(
@@ -773,6 +806,22 @@ class AdaptiveNeuralCompression(nn.Module):
     def forward(
         self, rgb: torch.Tensor, events: torch.Tensor, text_tokens: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        B = rgb.size(0)
+
+        # ── no_anc: bypass router entirely, use single fixed encoder ─────────
+        if self.cfg.no_anc:
+            clip_feat = self.clip_stem(rgb)               # [B, 512]
+            feat = self.encoders[0](clip_feat)
+            encoded = self.projections[0](feat)
+            comp_cost = torch.full((B,), self._head_flops[0], device=rgb.device)
+            router_logits = torch.zeros(B, 1, device=rgb.device)
+            weights = torch.ones(B, 1, device=rgb.device)
+            if self.prefix_adapter is not None:
+                token_logits = self.decoder(self.prefix_adapter(encoded), text_tokens)
+            else:
+                token_logits = self.decoder(encoded, text_tokens)
+            return token_logits, comp_cost, router_logits, weights
+
         if self.clip_stem is not None:
             # CLIP stem: produces [B, 512] CLS token (frozen, no grad).
             clip_feat = self.clip_stem(rgb)               # [B, 512]
@@ -781,8 +830,6 @@ class AdaptiveNeuralCompression(nn.Module):
         else:
             router_logits = self.complexity_estimator(events)
             weights = self.router(router_logits)
-
-        B = rgb.size(0)
         encoded = torch.zeros(B, self.cfg.hidden_dim, device=rgb.device)
         comp_cost = torch.zeros(B, device=rgb.device)
 
@@ -1881,6 +1928,17 @@ class Trainer:
             )
 
     def train(self) -> Dict[str, Any]:
+        if self.cfg.eval_only:
+            if self.is_main:
+                logger.info("eval_only=True: running single validation pass then exiting.")
+            val_metrics = self._validate(-1)
+            caption_metrics = self._evaluate_captions(-1)
+            all_metrics = {**val_metrics, **caption_metrics}
+            if self.is_main:
+                logger.info("eval_only results: %s", {k: f"{v:.4f}" for k, v in all_metrics.items() if isinstance(v, float)})
+                (self.run_dir / "eval_only_results.json").write_text(json.dumps(all_metrics, indent=2))
+            return all_metrics
+
         if self.is_main:
             logger.info("Starting training from epoch %d", self.start_epoch)
         for epoch in range(self.start_epoch, self.cfg.epochs):
@@ -2180,6 +2238,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Number of learned tokens S in the TokenLearner baseline")
     p.add_argument("--eval_cider_freq", type=int, default=default.eval_cider_freq,
                    help="Compute CIDEr/BLEU-4 every N epochs (0 = final only)")
+    p.add_argument("--no_anc", action="store_true",
+                   help="S5 ablation: single fixed encoder, no routing (requires --clip_backbone)")
+    p.add_argument("--eval_only", action="store_true",
+                   help="S1: load checkpoint from output_dir, run one eval pass, exit")
     p.add_argument("--no_onnx", action="store_true")
     p.add_argument("--no_tensorboard", action="store_true")
     p.add_argument("--log_level", type=str, default=default.log_level)
@@ -2231,6 +2293,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         gpt2_decoder=args.gpt2_decoder,
         gpt2_n_prefix=args.gpt2_n_prefix,
         eval_cider_freq=args.eval_cider_freq,
+        no_anc=args.no_anc,
+        eval_only=args.eval_only,
         export_onnx=not args.no_onnx,
         tensorboard=not args.no_tensorboard,
         log_level=args.log_level,
