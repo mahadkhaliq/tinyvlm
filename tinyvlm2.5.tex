@@ -664,8 +664,73 @@ Full architecture, hyperparameters, and training details in Section~4.1. All exp
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\newpage
-%\input{checklist.tex}  % NeurIPS reproducibility checklist — attach separately
+\newpage
+\section*{NeurIPS 2026 Paper Checklist}
 
+\noindent For each question, answer \textbf{Yes}, \textbf{No}, or \textbf{NA}.
+
+\begin{enumerate}
+
+\item \textbf{Claims.}
+\textit{Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?}\\
+\textbf{Yes.} All quantitative claims (CIDEr, BLEU-4, GFLOPs, DVS128 accuracy) in the abstract and introduction correspond to entries in Tables~\ref{tab:captioning}--\ref{tab:ondevice} and are supported by 3-seed experiments with paired $t$-tests.
+
+\item \textbf{Limitations.}
+\textit{Does the paper discuss the limitations of the work performed by the authors?}\\
+\textbf{Yes.} A dedicated Limitations paragraph (Section~\ref{sec:conclusion}) identifies the CIDEr gap of the CLIP+GPT-2 path, fixed 2×2 patch granularity of STTF, and the absence of full real-world event-RGB synchronization.
+
+\item \textbf{Theory Assumptions and Proofs.}
+\textit{For each theoretical result, does the paper provide the full set of assumptions and a complete proof?}\\
+\textbf{NA.} The paper makes no formal theorem claims; all contributions are empirical.
+
+\item \textbf{Experimental Result Reproducibility.}
+\textit{Does the paper fully disclose the information needed to reproduce the main experimental results?}\\
+\textbf{Yes.} Section~4.1 (Training Details) lists all hyperparameters, optimizer settings, loss weights, seeds, and hardware. Fixed seeds \{42, 43, 44\} are used throughout. Evaluation protocol (Karpathy val split, pycocoevalcap, NLTK) is described in Section~4.1.
+
+\item \textbf{Open Access to Data and Code.}
+\textit{Does the paper provide open access to data and code with sufficient instructions to reproduce the results?}\\
+\textbf{Yes} (upon acceptance). Code, model checkpoints, and evaluation scripts will be released publicly. All datasets used (MS-COCO 2017, DVS128 Gesture, N-Caltech101) are publicly available and properly cited.
+
+\item \textbf{Experimental Setting / Details.}
+\textit{Does the paper specify all training and test details necessary to understand the results?}\\
+\textbf{Yes.} Data splits (Karpathy), batch sizes, learning rates, schedulers, regularisation, early-stopping criteria, and hardware are stated in Section~4.1.
+
+\item \textbf{Experiment Statistical Significance.}
+\textit{Does the paper report error bars and/or statistical significance tests appropriately?}\\
+\textbf{Yes.} All multi-seed results report mean~$\pm$~std. Comparisons against TokenLearner use paired Welch $t$-tests with Cohen's $d$ effect sizes and 95\% confidence intervals (Table~\ref{tab:captioning}).
+
+\item \textbf{Experiments Compute Resources.}
+\textit{Does the paper provide sufficient information on the computational resources used?}\\
+\textbf{Yes.} All experiments were run on a single NVIDIA A100 80~GB GPU on the Hellbender HPC cluster. Training time ($\approx$9 GPU-hours for 50 epochs) and inference GFLOPs (17.60 for CLIP, 10.3 weighted-average for CNN) are reported.
+
+\item \textbf{Code of Ethics.}
+\textit{Does the research conform with the NeurIPS Code of Ethics?}\\
+\textbf{Yes.} This work advances efficient edge AI; no personal data was collected; no deceptive practices were used.
+
+\item \textbf{Broader Impacts.}
+\textit{Does the paper discuss both positive and negative societal impacts?}\\
+\textbf{Yes.} Appendix~B (Broader Impact) addresses positive applications (assistive technology, healthcare, disaster response) and risks (surveillance, privacy, safety in autonomous systems, aggregate energy consumption).
+
+\item \textbf{Safeguards.}
+\textit{Does the paper describe safeguards for responsible release of data or models with potential for misuse?}\\
+\textbf{NA.} The model is a caption generator trained on public datasets; misuse potential is low. No novel data collection or generative capabilities beyond image captioning are introduced.
+
+\item \textbf{Licenses for Existing Assets.}
+\textit{Are creators of existing assets (code, data, models) properly credited with appropriate licenses?}\\
+\textbf{Yes.} MS-COCO, DVS128 Gesture, N-Caltech101, OpenAI CLIP (MIT), GPT-2 (MIT / OpenAI usage policy), and open\_clip (MIT) are cited and their terms respected.
+
+\item \textbf{New Assets.}
+\textit{Are new assets introduced in the paper documented, including their license?}\\
+\textbf{Yes.} Code and checkpoints will be released under the MIT License upon acceptance, as stated in the reproducibility statement.
+
+\item \textbf{Crowdsourcing and Research with Human Subjects.}
+\textit{Does the paper include IRB approval or participant consent where applicable?}\\
+\textbf{NA.} No crowdsourcing or human-subject experiments were conducted.
+
+\item \textbf{Potentially Harmful Insights, Methodologies, and Applications.}
+\textit{Does the submission describe potential harms and safeguards for potentially harmful applications?}\\
+\textbf{NA.} No novel attack vectors or tools with significant misuse potential are introduced. Broader societal risks are discussed in Appendix~B.
+
+\end{enumerate}
 
 \end{document}
