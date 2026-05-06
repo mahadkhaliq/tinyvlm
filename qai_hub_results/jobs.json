@@ -1,0 +1,122 @@
+{
+  "cnn_sttf_anc_b0_s21": {
+    "job_id": "jgle66mep",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/cnn_sttf_anc_b0.onnx",
+    "submitted_at": "2026-05-06T00:32:18Z",
+    "status": "\u2705",
+    "latency_ms": 11.078,
+    "peak_mem_bytes": 159948800,
+    "downloaded_at": "2026-05-06T00:46:08Z"
+  },
+  "cnn_sttf_anc_b1_s21": {
+    "job_id": "j56qee4vg",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/cnn_sttf_anc_b1.onnx",
+    "submitted_at": "2026-05-06T00:32:22Z",
+    "status": "\u2705",
+    "latency_ms": 20.11,
+    "peak_mem_bytes": 173686784,
+    "downloaded_at": "2026-05-06T00:46:09Z"
+  },
+  "cnn_sttf_anc_b2_s21": {
+    "job_id": "jp3qvv0x5",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/cnn_sttf_anc_b2.onnx",
+    "submitted_at": "2026-05-06T00:32:27Z",
+    "status": "\u2705",
+    "latency_ms": 40.111,
+    "peak_mem_bytes": 196882432,
+    "downloaded_at": "2026-05-06T00:46:11Z"
+  },
+  "cnn_dense_s21": {
+    "job_id": "jpe4eem75",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/cnn_dense.onnx",
+    "submitted_at": "2026-05-06T00:32:32Z",
+    "status": "\u2705",
+    "latency_ms": 41.734,
+    "peak_mem_bytes": 194125824,
+    "downloaded_at": "2026-05-06T00:46:13Z"
+  },
+  "cnn_sttf_anc_b1_xelite": {
+    "job_id": "jgzvoodzp",
+    "device": "Snapdragon X Elite CRD",
+    "onnx": "models/onnx/cnn_sttf_anc_b1.onnx",
+    "submitted_at": "2026-05-06T00:32:36Z",
+    "status": "\u2705",
+    "latency_ms": 1.102,
+    "peak_mem_bytes": 64270336,
+    "downloaded_at": "2026-05-06T00:46:14Z"
+  },
+  "cnn_dense_xelite": {
+    "job_id": "j5wm226zg",
+    "device": "Snapdragon X Elite CRD",
+    "onnx": "models/onnx/cnn_dense.onnx",
+    "submitted_at": "2026-05-06T00:32:41Z",
+    "status": "\u2705",
+    "latency_ms": 1.318,
+    "peak_mem_bytes": 74473472,
+    "downloaded_at": "2026-05-06T00:46:16Z"
+  },
+  "cnn_sttf_anc_b0_xelite": {
+    "job_id": "jgd7eerlg",
+    "device": "Snapdragon X Elite CRD",
+    "onnx": "models/onnx/cnn_sttf_anc_b0.onnx",
+    "submitted_at": "2026-05-06T00:57:40Z",
+    "status": "\u2705",
+    "latency_ms": 1.056,
+    "peak_mem_bytes": 60678144,
+    "downloaded_at": "2026-05-06T01:04:15Z"
+  },
+  "cnn_sttf_anc_b2_xelite": {
+    "job_id": "jg99jj9lg",
+    "device": "Snapdragon X Elite CRD",
+    "onnx": "models/onnx/cnn_sttf_anc_b2.onnx",
+    "submitted_at": "2026-05-06T00:57:44Z",
+    "status": "\u2705",
+    "latency_ms": 1.338,
+    "peak_mem_bytes": 74522624,
+    "downloaded_at": "2026-05-06T01:04:16Z"
+  },
+  "clip_anc_b0_s21": {
+    "job_id": "j5mvqq0d5",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/clip_anc_b0.onnx",
+    "submitted_at": "2026-05-06T01:13:43Z",
+    "status": "\u2705",
+    "latency_ms": 97.377,
+    "peak_mem_bytes": 540229632,
+    "downloaded_at": "2026-05-06T01:22:33Z"
+  },
+  "clip_anc_b1_s21": {
+    "job_id": "jgnrllzk5",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/clip_anc_b1.onnx",
+    "submitted_at": "2026-05-06T01:14:09Z",
+    "status": "\u2705",
+    "latency_ms": 97.142,
+    "peak_mem_bytes": 539205632,
+    "downloaded_at": "2026-05-06T01:22:35Z"
+  },
+  "clip_anc_b2_s21": {
+    "job_id": "jpr188l0g",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/clip_anc_b2.onnx",
+    "submitted_at": "2026-05-06T01:14:30Z",
+    "status": "\u2705",
+    "latency_ms": 99.377,
+    "peak_mem_bytes": 537755648,
+    "downloaded_at": "2026-05-06T01:22:37Z"
+  },
+  "cnn_tokenlearner_s21": {
+    "job_id": "j5mvqqk95",
+    "device": "Samsung Galaxy S21 (Family)",
+    "onnx": "models/onnx/cnn_tokenlearner.onnx",
+    "submitted_at": "2026-05-06T01:28:43Z",
+    "status": "\u2705",
+    "latency_ms": 41.591,
+    "peak_mem_bytes": 190111744,
+    "downloaded_at": "2026-05-06T01:32:58Z"
+  }
+}

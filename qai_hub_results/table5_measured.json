@@ -1,0 +1,52 @@
+{
+  "Samsung Galaxy S21 (Family)": {
+    "sttf_anc_routing_weighted_ms": 24.310429999999997,
+    "raw_runs": {
+      "cnn_sttf_anc_b0_s21": {
+        "latency_ms": 11.078,
+        "peak_mem_bytes": 159948800,
+        "job_id": "jgle66mep"
+      },
+      "cnn_sttf_anc_b1_s21": {
+        "latency_ms": 20.11,
+        "peak_mem_bytes": 173686784,
+        "job_id": "j56qee4vg"
+      },
+      "cnn_sttf_anc_b2_s21": {
+        "latency_ms": 40.111,
+        "peak_mem_bytes": 196882432,
+        "job_id": "jp3qvv0x5"
+      },
+      "cnn_dense_s21": {
+        "latency_ms": 41.734,
+        "peak_mem_bytes": 194125824,
+        "job_id": "jpe4eem75"
+      }
+    }
+  },
+  "Snapdragon X Elite CRD": {
+    "sttf_anc_routing_weighted_ms": 1.1703400000000002,
+    "raw_runs": {
+      "cnn_sttf_anc_b1_xelite": {
+        "latency_ms": 1.102,
+        "peak_mem_bytes": 64270336,
+        "job_id": "jgzvoodzp"
+      },
+      "cnn_dense_xelite": {
+        "latency_ms": 1.318,
+        "peak_mem_bytes": 74473472,
+        "job_id": "j5wm226zg"
+      },
+      "cnn_sttf_anc_b0_xelite": {
+        "latency_ms": 1.056,
+        "peak_mem_bytes": 60678144,
+        "job_id": "jgd7eerlg"
+      },
+      "cnn_sttf_anc_b2_xelite": {
+        "latency_ms": 1.338,
+        "peak_mem_bytes": 74522624,
+        "job_id": "jg99jj9lg"
+      }
+    }
+  }
+}
