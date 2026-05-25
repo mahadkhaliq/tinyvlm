@@ -1,0 +1,48 @@
+{
+  "sweep": "lambda_flops",
+  "seed": 42,
+  "rows": [
+    {
+      "lambda_flops": 0.01,
+      "cider": 38.791107220345786,
+      "bleu4": 13.775213639748035,
+      "val_loss": 3.8838533196578156,
+      "encoder_gflops": 8.0,
+      "dominant_branch_eval": "Small"
+    },
+    {
+      "lambda_flops": 0.05,
+      "cider": 27.642725166845793,
+      "bleu4": 10.83431018197483,
+      "val_loss": 3.9563710947294495,
+      "encoder_gflops": 2.0,
+      "dominant_branch_eval": "Tiny"
+    },
+    {
+      "lambda_flops": 0.1,
+      "cider": 26.724399266909003,
+      "bleu4": 10.283064572756194,
+      "val_loss": 3.957270613232174,
+      "encoder_gflops": 2.0,
+      "dominant_branch_eval": "Tiny"
+    },
+    {
+      "lambda_flops": 0.5,
+      "cider": 27.19055047128543,
+      "bleu4": 10.54667004924065,
+      "val_loss": 3.957479304751834,
+      "encoder_gflops": 2.0,
+      "dominant_branch_eval": "Tiny"
+    },
+    {
+      "lambda_flops": 1.0,
+      "cider": 27.105237288573512,
+      "bleu4": 10.351084939608654,
+      "val_loss": 3.954066598866437,
+      "encoder_gflops": 2.0,
+      "dominant_branch_eval": "Tiny"
+    }
+  ],
+  "finding": "Router collapses to single branch at eval; branch identity depends on lambda_flops. lambda=0.01 -> Small (8 GFLOPs, CIDEr 38.8). lambda>=0.05 -> Tiny (2 GFLOPs, CIDEr ~27). No true Pareto in middle: bimodal collapse.",
+  "paper_action": "Report Pareto + routing-collapse observation. The default lambda=0.1 is on the dominated side; lambda=0.01 maximizes CIDEr at 8 GFLOPs but model still collapses to single branch \u2014 adaptive compute claim cannot be sustained without input-dependent routing signal (zero-event input artifact, see E8)."
+}

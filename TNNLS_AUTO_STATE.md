@@ -2,8 +2,9 @@
 instance_id: 37721982
 rclone_dest: s3research:vastai-research/tinyvlm/tnnls
 gpu_hours_budget: 100
-gpu_hours_spent: 3.20
+gpu_hours_spent: 7.95
 total_uploads: 1
+cycle_complete: 2026-05-25T16:13:00Z
 max_uploads: 10
 disk_safety_margin_gb: 10
 local_downloads_root: ./tnnls_results/
@@ -21,7 +22,18 @@ schema_version: 1
 - [x] phase_E8_routing_adaptivity    COMPLETE  gh_spent=0.02  s3_uri=phase_E8_routing_adaptivity/20260525/  finished=2026-05-25T08:05:00Z  notes="ROUTING COLLAPSE: 100% Medium at inference; complexity_estimator constant (zero-event input); verdict=routing_collapse_at_inference"
 - [x] phase_E9_soft_vs_hard          COMPLETE  gh_spent=0.05  s3_uri=phase_E9_soft_vs_hard/20260525/    finished=2026-05-25T08:10:00Z  notes="CNN seed_42: ΔCIDEr(soft-hard)=-2.55; hard collapses to Medium (best encoder), soft averages all 3; CLIP arm deferred"
 - [x] phase_E7_dense_smallenc        COMPLETE  gh_spent=3.0  s3_uri=phase_E7_dense_smallenc/20260525/  finished=2026-05-25T11:06:47Z  notes="CIDEr 42.10±8.24 (3 seeds 42/43/44 = 40.0/45.9/40.4); +6.08 over STTF+ANC, Cohen d=2.57, p=0.08 (Welch); REVIEWER-KILLER for ANC value claim"
-- [~] phase_E15_lambda_pareto        IN_PROGRESS  budget_gh=5  notes="5 settings × 10ep seed_42 STTF+ANC; lambda_flops sweep; launched 11:10; ETA ~15:55"
+- [x] phase_E15_lambda_pareto        COMPLETE  gh_spent=4.85  s3_uri=phase_E15_lambda_pareto/20260525/  finished=2026-05-25T16:13:00Z  notes="bimodal collapse: λ=0.01→Small (8G, 38.79 CIDEr), λ≥0.05→Tiny (2G, ~27 CIDEr); no graded Pareto; closes T4"
+
+# S3 archive index
+
+- phase_E18_wallclock_cache: s3://vastai-research/tinyvlm/tnnls/phase_E18_wallclock_cache/20260525/
+- phase_E19_full_metrics:    s3://vastai-research/tinyvlm/tnnls/phase_E19_full_metrics/20260525/
+- phase_E8_routing_adaptivity: s3://vastai-research/tinyvlm/tnnls/phase_E8_routing_adaptivity/20260525/
+- phase_E9_soft_vs_hard:     s3://vastai-research/tinyvlm/tnnls/phase_E9_soft_vs_hard/20260525/
+- phase_E7_dense_smallenc:   s3://vastai-research/tinyvlm/tnnls/phase_E7_dense_smallenc/20260525/
+- phase_E15_lambda_pareto:   s3://vastai-research/tinyvlm/tnnls/phase_E15_lambda_pareto/20260525/
+- checkpoints/phase_E7_dense_small/seed_{42,43,44}/best.pt
+- checkpoints/phase_E15_lambda_best/best.pt (λ=0.01, Small branch winner)
 
 # Deferred / skipped
 
