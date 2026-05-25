@@ -184,11 +184,13 @@ class Config:
     gpt2_n_prefix: int = 10           # number of visual prefix tokens fed to GPT-2
 
     # --- Baseline ---
-    baseline: str = "none"          # "none" = STTF+ANC, "tokenlearner" = TL baseline
+    baseline: str = "none"          # "none" = STTF+ANC, "tokenlearner" = TL, "dense" = single encoder
+    encoder_only: str = "medium"    # dense baseline encoder: "tiny", "small", or "medium"
     tokenlearner_num_tokens: int = 8  # number of learned tokens S
 
     # --- Evaluation ---
     eval_cider_freq: int = 5   # compute CIDEr/BLEU-4 every N epochs (0 = final only)
+    eval_routing_mode: str = "hard"  # "hard" = deployed argmax, "soft" = train-time weighted routing
 
     # --- Export ---
     export_onnx: bool = True
@@ -786,7 +788,8 @@ class AdaptiveNeuralCompression(nn.Module):
         encoded = torch.zeros(B, self.cfg.hidden_dim, device=rgb.device)
         comp_cost = torch.zeros(B, device=rgb.device)
 
-        if self.training:
+        use_soft_routing = self.training or self.cfg.eval_routing_mode == "soft"
+        if use_soft_routing:
             # Soft routing: all encoders run; gradients flow through weights.
             if self.clip_stem is not None:
                 feats = [enc(clip_feat) for enc in self.encoders]
@@ -814,6 +817,60 @@ class AdaptiveNeuralCompression(nn.Module):
         else:
             token_logits = self.decoder(encoded, text_tokens)
         return token_logits, comp_cost, router_logits, weights
+
+
+# =============================================================================
+# Dense single-encoder baseline for FLOPs-matched comparisons
+# =============================================================================
+
+
+class DenseEncoderBaseline(nn.Module):
+    """Dense CNN baseline with a single fixed encoder branch.
+
+    This supports TNNLS E7: a FLOPs-matched SmallEncoder-only baseline. It
+    deliberately removes ANC routing and STTF adaptivity while preserving the
+    caption decoder and training loop interface.
+    """
+
+    _ENCODER_FACTORY: Dict[str, Callable[[Config], Tuple[nn.Module, int]]] = {
+        "tiny": lambda cfg: (TinyEncoder(dim=cfg.tiny_dim, dropout=cfg.dropout), cfg.tiny_dim),
+        "small": lambda cfg: (SmallEncoder(dim=cfg.small_dim, dropout=cfg.dropout), cfg.small_dim),
+        "medium": lambda cfg: (MediumEncoder(dim=cfg.medium_dim, dropout=cfg.dropout), cfg.medium_dim),
+    }
+
+    def __init__(self, cfg: "Config") -> None:
+        super().__init__()
+        if cfg.encoder_only not in self._ENCODER_FACTORY:
+            raise ValueError(
+                f"Unsupported --encoder_only={cfg.encoder_only!r}; "
+                "expected one of tiny, small, medium"
+            )
+        self.cfg = cfg
+        self.encoder_name = cfg.encoder_only
+        self.encoder, encoder_dim = self._ENCODER_FACTORY[cfg.encoder_only](cfg)
+        self.proj = nn.Linear(encoder_dim, cfg.hidden_dim)
+        self.decoder = ConditionalTransformer(
+            dim=cfg.hidden_dim,
+            vocab_size=cfg.vocab_size,
+            max_length=cfg.max_length,
+            nhead=cfg.num_heads,
+            num_layers=cfg.num_decoder_layers,
+            dropout=cfg.dropout,
+        )
+
+    def forward(
+        self, rgb: torch.Tensor, events: torch.Tensor, text_tokens: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        feat = self.encoder(rgb, events)
+        encoded = self.proj(feat)
+        token_logits = self.decoder(encoded, text_tokens)
+
+        B = encoded.shape[0]
+        flops = float(getattr(self.encoder, "flops", 0.0))
+        comp_cost = torch.full((B,), flops, device=encoded.device)
+        router_logits = torch.zeros(B, 1, device=encoded.device)
+        router_weights = torch.ones(B, 1, device=encoded.device)
+        return token_logits, comp_cost, router_logits, router_weights
 
 
 # =============================================================================
@@ -1469,6 +1526,10 @@ class Trainer:
             self.model: Any = TokenLearnerBaseline(
                 cfg, num_tokens=cfg.tokenlearner_num_tokens
             ).to(self.device)
+        elif cfg.baseline == "dense":
+            if cfg.clip_backbone:
+                raise ValueError("--baseline dense currently supports CNN encoders only")
+            self.model = DenseEncoderBaseline(cfg).to(self.device)
         else:
             self.model = AdaptiveNeuralCompression(cfg).to(self.device)
 
@@ -1525,7 +1586,11 @@ class Trainer:
             n_params = sum(p.numel() for p in self.raw_model.parameters())
             logger.info(
                 "Model: %s | parameters: %.2fM",
-                cfg.baseline if cfg.baseline != "none" else "STTF+ANC",
+                (
+                    f"Dense-{cfg.encoder_only}"
+                    if cfg.baseline == "dense"
+                    else cfg.baseline if cfg.baseline != "none" else "STTF+ANC"
+                ),
                 n_params / 1e6,
             )
 
@@ -2194,12 +2259,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Export / logging
     p.add_argument("--baseline", type=str, default=default.baseline,
-                   choices=["none", "tokenlearner"],
+                   choices=["none", "tokenlearner", "dense"],
                    help="Swap STTF+ANC for a comparison baseline model")
+    p.add_argument("--encoder_only", type=str, default=default.encoder_only,
+                   choices=["tiny", "small", "medium"],
+                   help="Single CNN encoder used when --baseline dense")
     p.add_argument("--tokenlearner_num_tokens", type=int, default=default.tokenlearner_num_tokens,
                    help="Number of learned tokens S in the TokenLearner baseline")
     p.add_argument("--eval_cider_freq", type=int, default=default.eval_cider_freq,
                    help="Compute CIDEr/BLEU-4 every N epochs (0 = final only)")
+    p.add_argument("--eval_routing_mode", type=str, default=default.eval_routing_mode,
+                   choices=["hard", "soft"],
+                   help="Routing mode used during eval/inference for STTF+ANC")
     p.add_argument("--no_onnx", action="store_true")
     p.add_argument("--no_tensorboard", action="store_true")
     p.add_argument("--log_level", type=str, default=default.log_level)
@@ -2244,6 +2315,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         deterministic=args.deterministic,
         num_workers=args.num_workers,
         baseline=args.baseline,
+        encoder_only=args.encoder_only,
         tokenlearner_num_tokens=args.tokenlearner_num_tokens,
         clip_backbone=args.clip_backbone,
         clip_model=args.clip_model,
@@ -2251,6 +2323,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         gpt2_decoder=args.gpt2_decoder,
         gpt2_n_prefix=args.gpt2_n_prefix,
         eval_cider_freq=args.eval_cider_freq,
+        eval_routing_mode=args.eval_routing_mode,
         export_onnx=not args.no_onnx,
         tensorboard=not args.no_tensorboard,
         log_level=args.log_level,
