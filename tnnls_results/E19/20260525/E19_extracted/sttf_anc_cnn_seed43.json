@@ -1,0 +1,22 @@
+{
+  "variant": "sttf_anc_cnn_seed43",
+  "ckpt": "/workspace/ckpts/sttf_anc_cnn/seed_43_tau_0.80/checkpoints/best.pt",
+  "n_unique_images": 5000,
+  "val_fraction": 1.0,
+  "eval_routing_mode": "hard",
+  "baseline": "none",
+  "encoder_only": "medium",
+  "clip_backbone": false,
+  "decode_sec": 117.0,
+  "metrics_sec": 2.0,
+  "bleu1": 50.6213,
+  "bleu2": 32.6736,
+  "bleu3": 20.6768,
+  "bleu4": 13.537,
+  "rouge_l": 35.6846,
+  "cider": 35.5356,
+  "meteor": null,
+  "meteor_skipped": true,
+  "spice": null,
+  "spice_skipped": true
+}

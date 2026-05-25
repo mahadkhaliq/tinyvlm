@@ -1,0 +1,22 @@
+{
+  "variant": "tokenlearner_seed42",
+  "ckpt": "/workspace/ckpts/tokenlearner/seed_42_tau_0.80/checkpoints/best.pt",
+  "n_unique_images": 5000,
+  "val_fraction": 1.0,
+  "eval_routing_mode": "hard",
+  "baseline": "tokenlearner",
+  "encoder_only": "medium",
+  "clip_backbone": false,
+  "decode_sec": 80.8,
+  "metrics_sec": 2.0,
+  "bleu1": 40.3228,
+  "bleu2": 19.5714,
+  "bleu3": 9.6562,
+  "bleu4": 5.5544,
+  "rouge_l": 26.7874,
+  "cider": 5.0989,
+  "meteor": null,
+  "meteor_skipped": true,
+  "spice": null,
+  "spice_skipped": true
+}

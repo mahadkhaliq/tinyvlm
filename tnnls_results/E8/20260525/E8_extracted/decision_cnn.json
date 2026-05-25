@@ -1,0 +1,42 @@
+{
+  "variant": "cnn",
+  "n_unique_images": 5000,
+  "spearman_corr_gpsi_branch": null,
+  "spearman_p_value": null,
+  "per_branch_fraction": [
+    0.0,
+    0.0,
+    1.0
+  ],
+  "per_branch_count": [
+    0,
+    0,
+    5000
+  ],
+  "branch_names": [
+    "Tiny",
+    "Small",
+    "Medium"
+  ],
+  "forward_sec": 56.7,
+  "ckpt": "/workspace/ckpts/sttf_anc_cnn/seed_42_tau_0.80/checkpoints/best.pt",
+  "verdict": "routing_collapse_at_inference",
+  "spearman_thresh": 0.2,
+  "note": "Per-branch decoded CIDEr deferred; verdict on Spearman alone.",
+  "logits_std_per_branch": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "softmax_mean_per_branch_eval": [
+    0.3125,
+    0.3367,
+    0.3508
+  ],
+  "training_hard_fraction_per_branch": [
+    0.31,
+    0.34,
+    0.35
+  ],
+  "interpretation": "Complexity estimator output is constant across val (std=0) because COCO event input is simulated as zero tensor (per CLAUDE.md). At inference (hard argmax), softmax favors branch 2 (Medium) by ~0.04 \u2192 100% Medium routing. Training utilization (0.31, 0.34, 0.35) reflects soft-weighted contribution under Gumbel noise, not specialization. PAPER ACTION: replace adaptive-routing claim with load-balanced-soft-routing; discuss zero-event artifact; on real event data (DVS128/N-Caltech101) re-audit may show different result."
+}

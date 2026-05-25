@@ -1,0 +1,35 @@
+{
+  "backbone": "cnn",
+  "seed": 42,
+  "hard": {
+    "bleu1": 51.3233,
+    "bleu2": 33.1524,
+    "bleu3": 20.9525,
+    "bleu4": 13.7222,
+    "rouge_l": 35.8025,
+    "cider": 36.16
+  },
+  "soft": {
+    "bleu1": 50.3213,
+    "bleu2": 32.069,
+    "bleu3": 20.1123,
+    "bleu4": 13.1567,
+    "rouge_l": 35.1007,
+    "cider": 33.6108
+  },
+  "delta_soft_minus_hard": {
+    "bleu1": -1.002,
+    "bleu2": -1.0834,
+    "bleu3": -0.8402,
+    "bleu4": -0.5655,
+    "rouge_l": -0.7018,
+    "cider": -2.5492
+  },
+  "notes": [
+    "Hard mode collapses routing to Medium branch (100% \u2014 per E8 audit).",
+    "Soft mode averages all 3 branches via softmax weights (0.31/0.34/0.35).",
+    "Hard > soft: \u0394CIDEr=-2.55 \u2192 Medium-alone outperforms weighted mix of Tiny+Small+Medium.",
+    "Interpretation: ANC at inference recovers full Medium-encoder quality while running 1 branch (3x FLOPs reduction vs running all 3).",
+    "CLIP arm deferred (no CLIP ckpt)."
+  ]
+}

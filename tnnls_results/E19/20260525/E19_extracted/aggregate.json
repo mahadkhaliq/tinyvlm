@@ -1,0 +1,126 @@
+{
+  "methods": {
+    "sttf_anc_cnn": {
+      "n_seeds": 3,
+      "seeds": [],
+      "bleu1": {
+        "mean": 51.219,
+        "std": 0.554,
+        "ci95_half": 1.375,
+        "values": [
+          51.3233,
+          50.6213,
+          51.7138
+        ]
+      },
+      "bleu2": {
+        "mean": 33.086,
+        "std": 0.384,
+        "ci95_half": 0.954,
+        "values": [
+          33.1524,
+          32.6736,
+          33.4333
+        ]
+      },
+      "bleu3": {
+        "mean": 20.941,
+        "std": 0.258,
+        "ci95_half": 0.642,
+        "values": [
+          20.9525,
+          20.6768,
+          21.1929
+        ]
+      },
+      "bleu4": {
+        "mean": 13.705,
+        "std": 0.161,
+        "ci95_half": 0.399,
+        "values": [
+          13.7222,
+          13.537,
+          13.8567
+        ]
+      },
+      "rouge_l": {
+        "mean": 35.821,
+        "std": 0.147,
+        "ci95_half": 0.365,
+        "values": [
+          35.8025,
+          35.6846,
+          35.9768
+        ]
+      },
+      "cider": {
+        "mean": 36.021,
+        "std": 0.433,
+        "ci95_half": 1.075,
+        "values": [
+          36.16,
+          35.5356,
+          36.367
+        ]
+      }
+    },
+    "tokenlearner": {
+      "n_seeds": 1,
+      "seeds": [],
+      "bleu1": {
+        "mean": 40.323,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          40.3228
+        ]
+      },
+      "bleu2": {
+        "mean": 19.571,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          19.5714
+        ]
+      },
+      "bleu3": {
+        "mean": 9.656,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          9.6562
+        ]
+      },
+      "bleu4": {
+        "mean": 5.554,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          5.5544
+        ]
+      },
+      "rouge_l": {
+        "mean": 26.787,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          26.7874
+        ]
+      },
+      "cider": {
+        "mean": 5.099,
+        "std": null,
+        "ci95_half": null,
+        "values": [
+          5.0989
+        ]
+      }
+    }
+  },
+  "notes": [
+    "TokenLearner uses single seed only; per-method comparison via mean only",
+    "METEOR + SPICE deferred (JVM deadlock guard); will run separately",
+    "Dense Medium row not present \u2014 needs separate retrain or encoder_only proxy",
+    "STTF+ANC CLIP row deferred \u2014 no local CLIP checkpoint found"
+  ]
+}

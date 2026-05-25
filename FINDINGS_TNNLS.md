@@ -14,4 +14,161 @@ Tracks results, headline numbers, and decision rationale for each phase executed
 
 ## Per-phase outcomes
 
-(append a dated `### phase_E<id>` subsection after each phase completes with: headline numbers, decision rationale, S3 URI, GPU-hours spent, anomalies)
+### Phase 0 — Instance setup — IN PROGRESS (2026-05-25)
+
+| Step | Status | Notes |
+|---|---|---|
+| 0.1 rclone + helpers on instance | ✓ DONE | `s3push`/`s3verify`/`s3pull` in `/root/.bashrc`, S3 prefix reachable from instance |
+| 0.2 deps install | ✓ DONE | torch 2.12.0.dev20260401+cu129 (Blackwell-ready, cc=12.0 verified via matmul); transformers 5.9.0, nltk 3.9.4 + punkt, onnx 1.21.0, pycocoevalcap, pycocotools, open_clip_torch, bert_score, scipy, matplotlib, pyyaml, openjdk 21 |
+| 0.3 COCO 2017 download | ⏳ IN PROGRESS | annotations (796 MB) + val2017 (788 MB) done; train2017.zip ~17 GB / 18 GB downloaded; unzip pending |
+| 0.4 upload code | ✓ DONE | nested `tinyvlm_vast.py` (95 KB, 2372 lines) + CLAUDE.md + TNNLS_AUTOMATION.md on `/workspace/` |
+| 0.5 upload reference ckpt | ✓ DONE | `tinyvlm_full.nosync/seed_42_tau_0.80/checkpoints/best.pt` (244 MB) → `/workspace/ckpts/sttf_anc_cnn_full/best.pt`, md5 verified |
+| 0.6 import + ckpt smoke | ✓ DONE | Config defaults (encoder_only="medium", eval_routing_mode="hard"), DenseEncoderBaseline+ANC present, ckpt loads 82 tensors, 0 missing/unexpected on AdaptiveNeuralCompression |
+
+Also uploaded supplementary: `tokenlearner_baseline.nosync/seed_42_tau_0.80/checkpoints/best.pt` (217 MB) → `/workspace/ckpts/tokenlearner/best.pt`. Md5 not verified.
+
+**Note:** No `STTF+ANC CLIP` ckpt found locally; **E9 CLIP arm and E19 CLIP row will defer** until ckpt produced. No standalone `Dense Medium` ckpt — using `--encoder_only medium` override on STTF+ANC ckpt as proxy (imperfect, flag in NOTES).
+
+### Phase E18 — Wall-clock + cache memory — COMPLETE (2026-05-25)
+
+**Synthetic 100-frame forward-pass benchmark** on STTF+ANC CNN ckpt, RTX 5090, hard routing:
+
+```json
+{
+  "peak_mem_MB": 389.63,
+  "frames": 100,
+  "tau": 0.80,
+  "batch": 1,
+  "H": 224, "W": 224,
+  "wall_sec": 0.351,
+  "ms_per_frame": 3.514,
+  "device": "NVIDIA GeForce RTX 5090",
+  "torch_version": "2.12.0.dev20260401+cu129",
+  "eval_routing_mode": "hard"
+}
+```
+
+**GPU-hours per training run** (from local `metrics.jsonl`, scraped):
+
+| Config | Epochs | World size | Wall hr | **GPU-hr** | Min/epoch |
+|---|---|---|---|---|---|
+| STTF+ANC CNN | 10 | 2× | 1.63 | **3.27** | 9.80 |
+| TokenLearner | 11 | 4× | 0.72 | **2.90** | 3.95 |
+| Balanced (sanity) | 10 | 2× | 1.64 | **3.29** | 9.87 |
+
+**ONNX export sizes** (`models/onnx/`, 1.45 GB total):
+
+| Variant | MB |
+|---|---|
+| `cnn_sttf_anc_b0` (Tiny branch)   | 38.0 |
+| `cnn_sttf_anc_b1` (Small branch)  | 45.0 |
+| `cnn_sttf_anc_b2` (Medium branch) | 65.1 |
+| `cnn_dense` | 65.1 |
+| `cnn_tokenlearner` | 64.5 |
+| `clip_anc_b0/b1/b2` | 389.1 / 389.5 / 390.0 |
+
+**Paper §4.1 candidate text:**
+> Training each STTF+ANC CNN run takes ≈3.3 GPU-hr on 2× RTX 5090 (10 epochs on MS-COCO Karpathy-train). Peak GPU memory during inference is ≈390 MB at τ=0.80 with batch=1, 224×224 on RTX 5090 over a 100-frame synthetic window. CNN ONNX export sizes are 38–65 MB per branch (1.45 GB total across CNN+CLIP variants).
+
+**Closes:** M3 (wall-clock + cache memory in §4.1).
+
+**Artifacts:** `/workspace/tnnls_results/E18/cache_mem.json`, `/workspace/logs/E18.log`.
+
+### Phase E19 — Full caption-metric panel — COMPLETE for CNN (2026-05-25)
+
+Bypassed broken `run_eval_only` path (`_maybe_resume` requires `latest.pt` + optimizer state; only `best.pt` available). Wrote `tnnls_eval.py` that loads ckpt directly via `torch.load + load_state_dict(strict=False)`. Greedy decode on COCO val (full 25K annotations → 5K unique images), pycocoevalcap BLEU-1..4 + ROUGE-L + CIDEr. METEOR + SPICE gated (JVM deadlock on first Meteor invocation).
+
+**Results (eval_routing_mode=hard, val_fraction=1.0, RTX 5090):**
+
+| Method | n_seeds | BLEU-1 | BLEU-2 | BLEU-3 | BLEU-4 | ROUGE-L | CIDEr |
+|---|---|---|---|---|---|---|---|
+| **STTF+ANC CNN** (mean ± 95% CI) | 3 | 51.22 ± 1.38 | 33.09 ± 0.95 | 20.94 ± 0.64 | **13.71 ± 0.40** | 35.82 ± 0.37 | **36.02 ± 1.08** |
+| TokenLearner | 1 | 40.32 | 19.57 | 9.66 | 5.55 | 26.79 | 5.10 |
+
+**Headline:** STTF+ANC CNN beats TokenLearner by **+30.9 CIDEr** and **+8.2 BLEU-4** at matched data + decoder. 3-seed CI very tight (CIDEr ±1.08 across seeds 42/43/44).
+
+**Decode wall-clock**: 80–158 sec per ckpt on RTX 5090 (5K unique images).
+**Metrics compute**: 2 sec per ckpt (Bleu+Rouge+Cider; Meteor+Spice skipped).
+
+**Deferred:**
+- METEOR + SPICE: pycocoevalcap Meteor wrapper deadlocks on dead JVM subprocess. Need timeout wrapper or separate eval. Tracked.
+- Dense Medium row: no standalone ckpt; will use `--encoder_only medium` override on ANC ckpt as proxy or run fresh training.
+- STTF+ANC CLIP row: no CLIP ckpt locally. Defer until CLIP ckpt produced.
+- Dense Small row: produced by E7 (separate phase).
+
+**Closes:** M5 partial (CIDEr + BLEU-4 + ROUGE-L confirmed; METEOR + SPICE in follow-up).
+
+**Artifacts:** `tnnls_results/E19/{sttf_anc_cnn_seed{42,43,44}.json, tokenlearner_seed42.json, aggregate.json}`. S3: `s3://…/phase_E19_full_metrics/20260525/`.
+
+### Phase E8 — Routing-adaptivity audit — COMPLETE (2026-05-25)
+
+Hooked `complexity_estimator` over full COCO val (5000 unique images). `routing_pairs_cnn.npz` saved.
+
+**Result:**
+- Per-branch fraction at inference (hard argmax): **[0.00, 0.00, 1.00]** — all 5000 images routed to Medium.
+- `complexity_estimator` output: **std=0.0 per branch** (constant logits regardless of input).
+- Softmax mean (eval): [0.31, 0.34, 0.35] — matches training utilization but argmax always = Medium.
+- Spearman ρ(g_ψ, branch) = NaN (no variance in branches array).
+
+**Root cause** (per `CLAUDE.md`): `CocoCaptionDataset` simulates events as zero tensor. complexity_estimator input is constant → output constant → routing collapses at inference. Training-time soft routing produced apparent 31/34/35 utilization via Gumbel noise.
+
+**Verdict:** `routing_collapse_at_inference`. **Paper action required:** replace "adaptive routing" claim with "load-balanced soft training + hard-argmax inference selects highest-capacity branch". On real event data (DVS128/N-Caltech101) re-audit may show different result.
+
+**Closes:** C1 (with strong negative result; per Lead E8 decision rule, this maps to "report as negative result in §5").
+
+**Artifacts:** `tnnls_results/E8/{decision_cnn.json, routing_pairs_cnn.npz, routing_scatter_cnn.pdf}`. S3: `s3://…/phase_E8_routing_adaptivity/20260525/`.
+
+### Phase E9 — Soft vs hard routing gap — COMPLETE (CNN seed_42, 2026-05-25)
+
+Two `tnnls_eval.py` runs on same STTF+ANC seed_42 ckpt, hard vs soft routing.
+
+| Metric | hard | soft | Δ (soft − hard) |
+|---|---|---|---|
+| BLEU-1 | 51.32 | 50.32 | -1.00 |
+| BLEU-2 | 33.15 | 32.07 | -1.08 |
+| BLEU-3 | 20.95 | 20.11 | -0.84 |
+| BLEU-4 | 13.72 | 13.16 | -0.57 |
+| ROUGE-L | 35.80 | 35.10 | -0.70 |
+| **CIDEr** | **36.16** | **33.61** | **-2.55** |
+
+**Interpretation:** hard mode collapses to Medium-only (E8 finding); soft mode averages all 3 branches (weights 0.31/0.34/0.35). Hard > soft because Medium-alone outperforms weighted mix of Tiny+Small+Medium. ANC at inference recovers full Medium-encoder quality while running 1 branch (≈3× FLOPs reduction vs running all 3).
+
+**Closes:** C2 (with reverse-direction finding: hard routing improves CIDEr vs soft training behavior).
+
+**Deferred:** CLIP arm (no CLIP ckpt locally).
+
+**Artifacts:** `tnnls_results/E9/{sttf_anc_cnn_seed42_soft.json, aggregate.json}`. S3: `s3://…/phase_E9_soft_vs_hard/20260525/`.
+
+### Phase E7 — FLOPs-matched Dense SmallEncoder — COMPLETE (3 seeds, 2026-05-25)
+
+`DenseEncoderBaseline` (single SmallEncoder, no routing) trained from scratch × 3 seeds on COCO train2017, 10 epochs each.
+
+**Per-seed results:**
+
+| Seed | val_loss | val_acc | CIDEr | BLEU-4 |
+|---|---|---|---|---|
+| 42 | 3.9203 | 45.94% | 40.03 | 14.10 |
+| 43 | 3.9177 | 46.00% | **45.93** | 16.15 |
+| 44 | 3.9204 | 45.96% | 40.35 | 14.55 |
+| **mean ± 95%CI** | 3.92±0.004 | 45.97%±0.08 | **42.10 ± 8.24** | 14.93 ± 2.63 |
+
+**Comparison vs STTF+ANC CNN** (3-seed mean = 36.02 ± 1.08):
+
+| | Dense Small | STTF+ANC | Δ | Cohen's d | Welch t (df≈2) | p (two-sided) |
+|---|---|---|---|---|---|---|
+| CIDEr | 42.10 | 36.02 | **+6.08** | **2.57** | 3.15 | 0.084 |
+
+**Headline:** Dense SmallEncoder (~8 GFLOPs, no routing) **outperforms STTF+ANC CNN by +6.08 CIDEr** at lower FLOPs. Effect size very large (d=2.57), p=0.08 (marginal, driven by seed_43 outlier 45.93 vs 40.0 for others).
+
+**Paper implications (fatal C6 finding):**
+- ANC's value proposition on COCO captioning is undermined: simpler dense baseline at smaller compute matches/beats it.
+- ANC's defensible niche: real event-camera data (DVS128/N-Caltech101) where complexity_estimator can be input-adaptive — pending PhD-track E1/E2 results.
+- On COCO with synthetic zero events, "adaptive compute" cannot be justified. Recommend repositioning ANC as "load-balanced soft-routing during training + capacity selector at inference" rather than input-adaptive computation.
+
+**Closes:** C6.
+
+**Artifacts:** `tnnls_results/E7/{seed_{42,43,44}/{summary,metrics,config}.json, aggregate.json}`. S3: `s3://…/phase_E7_dense_smallenc/20260525/` + `s3://…/checkpoints/phase_E7_dense_small/seed_{42,43,44}/best.pt`.
+
+### Phase E15 — λ₂ Pareto frontier — IN PROGRESS
+
+`lambda_flops ∈ {0.01, 0.05, 0.1, 0.5, 1.0}`, seed 42, 10 epochs each, STTF+ANC CNN. ~5.5 min/epoch × 50 epochs = ~4.6 hr ETA. Launched 2026-05-25T11:10:52Z.

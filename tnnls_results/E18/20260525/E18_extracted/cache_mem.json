@@ -1,0 +1,14 @@
+{
+  "peak_mem_MB": 389.63,
+  "frames": 100,
+  "tau": 0.8,
+  "batch": 1,
+  "H": 224,
+  "W": 224,
+  "wall_sec": 0.351,
+  "ms_per_frame": 3.514,
+  "device": "NVIDIA GeForce RTX 5090",
+  "torch_version": "2.12.0.dev20260401+cu129",
+  "eval_routing_mode": "hard",
+  "ckpt": "/workspace/ckpts/sttf_anc_cnn_full/best.pt"
+}

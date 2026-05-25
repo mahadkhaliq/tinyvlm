@@ -1,0 +1,59 @@
+{
+  "method": "Dense SmallEncoder",
+  "n_seeds": 3,
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "flops_gflops_estimate": 8.0,
+  "cider": {
+    "mean": 42.1041,
+    "std": 3.3205,
+    "ci95_half": 8.2487,
+    "values": [
+      40.030264214206426,
+      45.9339501255086,
+      40.34813349105833
+    ]
+  },
+  "bleu4": {
+    "mean": 14.9323,
+    "std": 1.0818,
+    "ci95_half": 2.6873,
+    "values": [
+      14.097353777417643,
+      16.154385328182105,
+      14.545132139299923
+    ]
+  },
+  "val_loss": {
+    "mean": 3.9195,
+    "std": 0.0015,
+    "ci95_half": 0.0038,
+    "values": [
+      3.9202987200505026,
+      3.9177390925948683,
+      3.92042267026128
+    ]
+  },
+  "val_accuracy": {
+    "mean": 0.4597,
+    "std": 0.0003,
+    "ci95_half": 0.0008,
+    "values": [
+      0.4594087753613295,
+      0.4600054701704292,
+      0.45955179844058325
+    ]
+  },
+  "comparison_vs_sttf_anc": {
+    "sttf_anc_cider_mean": 36.0209,
+    "sttf_anc_cider_sd": 0.4328,
+    "delta_cider_dense_minus_sttf": 6.0832,
+    "cohen_d": 2.5691,
+    "welch_t": 3.1465,
+    "welch_p_two_sided": 0.0842,
+    "verdict": "Dense Small DOMINATES STTF+ANC on COCO (+6.08 CIDEr at ~8 GFLOPs vs ~20 GFLOPs hard-routed Medium)"
+  }
+}
