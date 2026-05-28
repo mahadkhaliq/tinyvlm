@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "updated": "2026-05-28",
+  "updated_by": "Lead",
+  "note": "Coordination board for TNNLS revision. Both researchers write. Status one of: not_started | in_progress | blocked | held | complete | deferred. Lead reads PhD results via tnnls_results/E<id>/aggregate.json (no re-aggregation).",
+  "governance": {
+    "TNNLS_STATISTICAL_PLAN.md": {"status": "complete", "owner": "Lead", "closes": "M8", "created": "2026-05-28"},
+    "TNNLS_DATA_PROTOCOL.md": {"status": "in_progress", "owner": "Lead+PhD", "closes": "M9", "note": "Lead filled COCO + hardware; PhD must fill DVS128/MSR-VTT/N-Caltech101 before integration. Open audit flag: COCO Karpathy-vs-random-split."},
+    "TNNLS_STATE.json": {"status": "in_progress", "owner": "both", "note": "this file"},
+    "tnnls_claim_ledger.csv": {"status": "not_started", "owner": "Lead", "note": "every paper-facing numeric claim traced to a log artifact"}
+  },
+  "experiments": {
+    "E18": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E18_wallclock_cache/20260525/", "tnnls_results/E18/cache_mem.json"], "notes": "peak 389.6MB, 3.51ms/frame RTX5090; ~3.3 GPU-hr/train. Closes M3. EXPLORATORY (COCO, pre-plan)."},
+    "E19": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E19_full_metrics/20260525/", "tnnls_results/E19/aggregate.json"], "notes": "STTF+ANC 3-seed CIDEr 36.02±1.08, BLEU-4 13.71; TokenLearner 5.10 (1 seed). METEOR+SPICE deferred (JVM deadlock). Closes M5 partial. n=3 SUPPORTING."},
+    "E8": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E8_routing_adaptivity/20260525/", "tnnls_results/E8/decision_cnn.json"], "notes": "ROUTING COLLAPSE: 100% Medium at inference; complexity_estimator constant (zero-event COCO input). Verdict routing_collapse_at_inference. Closes C1 (negative). EXPLORATORY."},
+    "E9": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E9_soft_vs_hard/20260525/", "tnnls_results/E9/aggregate.json"], "notes": "CNN seed_42: dCIDEr(soft-hard)=-2.55; hard collapses to Medium (best), soft averages 3. Closes C2. CLIP arm deferred. EXPLORATORY single-seed."},
+    "E7": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E7_dense_smallenc/20260525/", "s3://vastai-research/tinyvlm/tnnls/checkpoints/phase_E7_dense_small/seed_{42,43,44}/best.pt", "tnnls_results/E7/aggregate.json"], "notes": "Dense Small CIDEr 42.10±8.24 (3 seeds 40.0/45.9/40.4) > STTF+ANC +6.08, Cohen d=2.57, Welch p=0.084 (marginal). REVIEWER-KILLER for ANC value claim. Closes C6. seed_43 outlier flagged."},
+    "E15": {"status": "complete", "owner": "Lead", "artifacts": ["s3://vastai-research/tinyvlm/tnnls/phase_E15_lambda_pareto/20260525/", "s3://vastai-research/tinyvlm/tnnls/checkpoints/phase_E15_lambda_best/best.pt"], "notes": "lambda_flops bimodal collapse: l=0.01->Small(8G,38.79), l>=0.05->Tiny(2G,~27). No graded Pareto. Closes T4 (negative). EXPLORATORY single-seed."},
+    "E3": {"status": "not_started", "owner": "Lead", "notes": "Architecture audit; remove ViT-B/16 contradiction, add tab:arch. Closes F5. ~6h."},
+    "E6": {"status": "not_started", "owner": "Lead", "notes": "Reconcile Table 1 latency (18.9ms, no device) with measured Table 5 (SD888 24.31ms). Closes F6."},
+    "E10": {"status": "not_started", "owner": "Lead", "notes": "N-Caltech101 direct AI Hub profiling to replace estimated Table 4 row. Closes C3. ~9 free jobs on token 2."},
+    "E24": {"status": "complete", "owner": "Lead", "artifacts": ["TNNLS_STATISTICAL_PLAN.md"], "notes": "Statistical analysis plan pre-registered 2026-05-28. Closes M8."},
+    "E25": {"status": "in_progress", "owner": "Lead+PhD", "artifacts": ["TNNLS_DATA_PROTOCOL.md"], "notes": "Lead filled COCO+hardware; PhD owes DVS128/MSR-VTT/N-Caltech101 sections. Closes M9."},
+    "E22": {"status": "not_started", "owner": "Lead", "notes": "Cross-team integration: assemble PhD numbers into tables, finalize tinyvlm_tnnls_v1.tex, claim-vs-evidence pass. Blocked on E1/E2/E4/E11."},
+    "E1": {"status": "in_progress", "owner": "PhD", "priority": "critical", "notes": "DVS128 diagnose; >=85% (acceptable) / >=90% (target). NOW PRIMARY EXPERIMENT: only viable test of input-adaptive routing on real event data after COCO collapse. Week-1 task: input-sanity check — confirm complexity_estimator receives non-constant event input (std>0), routing histogram not 100%-one-branch. Closes F1. 3-4 wks."},
+    "E2": {"status": "in_progress", "owner": "PhD", "priority": "high", "notes": "MSR-VTT video captioning + STTF token-reuse rate per tau. Data-prep may run parallel to E1, but DO NOT train until E1 routing confirmed non-collapsed. Closes F4,M1. 3-4 wks."},
+    "E4": {"status": "held", "owner": "PhD", "notes": "CLIP-ANC redesign so branches differ in FLOPs; 5 seeds. HELD until E1 wk1 diagnosis done. Closes F3."},
+    "E11": {"status": "held", "owner": "PhD", "notes": "5-seed headline sweep {42..46}; upgrades n=3 -> n=5 CIs + Cohen d. HELD; coordinated w/ E4. Closes C4,M4."},
+    "E12": {"status": "held", "owner": "PhD", "notes": "STTF fusion module spec + ablation (attn vs concat vs zero). HELD. Closes C5."},
+    "E16": {"status": "held", "owner": "PhD", "notes": "N-Caltech101 learning curve {25,50,75,100}%. HELD. Closes T3."},
+    "E17": {"status": "held", "owner": "PhD", "notes": "TokenLearner gap analysis (qualitative viz + KD experiment). HELD. Closes C7."}
+  },
+  "priority_decision_2026-05-28": {
+    "trigger": "Lead COCO cycle (E7/E8/E9/E15) showed routing collapse + dense-beats-ANC; PhD flagged priority shift.",
+    "decision": "E1 (DVS128) promoted to project-primary. E2 data-prep parallel, no training until E1 routing confirmed. E4/E11/E12/E16/E17 held until E1 Week-1 diagnosis. A100-hr spend (400-600) gated on E1 input-sanity check passing.",
+    "rationale": "ANC adaptive-compute claim cannot be sustained on COCO (zero-event artifact). Real event data is the only remaining vindication path."
+  }
+}
