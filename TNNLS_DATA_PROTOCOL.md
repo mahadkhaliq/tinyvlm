@@ -33,13 +33,28 @@ results are accepted into a table.
 
 ## COCO captioning  — **Lead-filled**
 
-- **Split source:** MS-COCO 2017. **Audit flag (must resolve before submission):** `CLAUDE.md`
-  states the Karpathy split (113k/5k/5k), but `tinyvlm_vast.py` `build_datasets` currently uses
-  a **seeded `random_split` with `val_fraction`** carved from `captions_train2017.json`, *not*
-  the canonical Karpathy test split. These are different protocols. The paper must state which
-  one each number came from. **Action:** either (a) switch eval to the published Karpathy
-  test-5k split and re-state, or (b) explicitly describe the random-split protocol and its seed.
-  Do not describe random-split numbers as "Karpathy split."
+- **Split source — VERIFIED 2026-05-28 (code-confirmed, was an open audit flag):** the
+  manuscript (`tinyvlm_tnnls_v1.tex` L236, L241) claims the **Karpathy split (113k/5k/5k)**.
+  The code does **not** implement this. `tinyvlm_vast.py::build_datasets` (L1184–1208) builds
+  the dataset from `coco_anns` (default `captions_train2017.json`) and applies a **seeded
+  `random_split(full, [n_train, n_val])` with `val_fraction = 0.05`** (L129, L1205–1208).
+  Consequences:
+  - **No Karpathy partition.** It is a random 95/5 split of COCO **train2017**.
+  - **No test set at all** — only train + a 5% "val". The claimed "5k test" does not exist
+    in the training/eval path.
+  - **Image-level leakage risk:** `CocoCaptionDataset` is indexed **per annotation**
+    (≈5 captions/image; `len(val2017 ds) ≈ 25K` annotations for 5K images). `random_split`
+    partitions *annotations*, so the **same image can appear in both train and val** with
+    different captions. The 5% "val" is therefore not image-disjoint from train.
+  - The separate TNNLS E19 caption-metric run (`tnnls_eval.py`) evaluated on `val2017`
+    (standard COCO val, 5K images) — a *different* set from the training-loop's random 5% val
+    that produced the `tab:main` Val-Acc/CIDEr numbers. Do not conflate the two.
+  - **The "Karpathy split" claim in the paper is false as written and must change.**
+    Decision required (Lead, before E11 reruns): **(a)** adopt a proper **image-disjoint**
+    split — ideally the published Karpathy test-5k — for all headline rows (E11 reruns it),
+    and re-state; or **(b)** keep the random split but make it **image-disjoint** (split on
+    `image_id`, not annotation) and describe it honestly as a seeded held-out val, dropping
+    any "Karpathy"/"test" language. Option (a) is strongly preferred for reviewer defensibility.
 - **Split sizes (as run):** full `val2017` annotation set ≈25K annotations → **5,000 unique
   images** after dedupe (one hypothesis per `image_id`).
 - **Preprocessing:** CNN backbone → ImageNet mean/std normalization, 224×224. CLIP backbone →
@@ -61,9 +76,10 @@ results are accepted into a table.
 - **Metric implementation:** pycocoevalcap BLEU-1..4 + ROUGE-L + CIDEr-D (single pinned
   version). METEOR/SPICE per `TNNLS_STATISTICAL_PLAN.md` §6 (JVM-gated; "n/a" if scorer did not
   complete — E19 Meteor deadlocked).
-- **Leakage checks:** `random_split` is seeded and deterministic; verify train/val image_id
-  sets are disjoint (`set(train_ids) & set(val_ids) == ∅`). **TODO:** add the disjointness
-  assertion output to this file once re-confirmed.
+- **Leakage checks — FAILS as currently coded.** `random_split` is seeded and deterministic
+  but operates on annotations, so `set(train_image_ids) & set(val_image_ids) ≠ ∅` (image-level
+  leakage; see Split source above). Must be fixed to split on `image_id` before any headline
+  number is trusted. Once fixed, add the disjointness assertion output here.
 - **Measured vs reported:** all COCO numbers in our tables are **measured by us**. Any
   compact-VLM comparison numbers (BLIP, etc.) cited from papers must be marked
   "author-reported" in the table footnote.
@@ -149,7 +165,7 @@ results are accepted into a table.
 
 | Section | Filled by | Lead sign-off |
 |---|---|---|
-| COCO | Lead | ✅ (2026-05-28, audit flag open: Karpathy-vs-random-split) |
+| COCO | Lead | ⚠️ (2026-05-28) — split claim is FALSE (random_split, not Karpathy) + image-level leakage; **decision + code fix required before headline numbers trusted** |
 | Hardware | Lead | ✅ (2026-05-28) |
 | DVS128 (E1) | PhD | ☐ pending |
 | MSR-VTT (E2) | PhD | ☐ pending |

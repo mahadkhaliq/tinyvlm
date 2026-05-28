@@ -1,0 +1,22 @@
+claim_id,paper_location,claim,reported_value,n_seeds,source_artifact,status,notes
+C-MAIN-01,tab:main / abstract,STTF+ANC CNN CIDEr,36.70 +/- 0.37,3,NeurIPS-era train2017 random-5pct-val run,LEGACY,"tab:main number from old NeurIPS runs; TNNLS E19 on val2017 gives 36.02 +/- 1.08 (different eval set). Reconcile which to report."
+C-MAIN-02,tab:main,STTF+ANC CNN Val Acc,45.89% +/- 0.05,3,NeurIPS-era run,LEGACY,token-level val accuracy on random 5pct val
+C-MAIN-03,tab:main,STTF+ANC CNN BLEU-4,14.20 +/- 0.14,3,NeurIPS-era run,LEGACY,"E19 val2017 gives 13.71 +/- 0.40"
+C-MAIN-04,tab:main,STTF+ANC CLIP CIDEr,82.24 +/- 1.39,3,NeurIPS-era CLIP run (tinyvlm_cider_seeds-era),UNVERIFIED_TNNLS,no local CLIP ckpt re-eval this cycle; CLIP arm deferred
+C-MAIN-05,tab:main,CLIP no-routing iso-backbone CIDEr,81.34,1,seed42 ablation,UNVERIFIED_TNNLS,ANC routing gain +0.90 CIDEr; n=1 not significant at alpha=0.05
+C-MAIN-06,tab:main,STTF+ANC CNN enc FLOPs (hard-routing avg),~10.3 GFLOPs,n/a,0.31*2+0.34*8+0.35*20 analytic,VERIFIED,routing-weighted; CAVEAT routing collapses 100pct to one branch at inference (E8) so weights are training-time
+C-MAIN-07,tab:main,TokenLearner CIDEr,45.09,1,NeurIPS-era run,LEGACY,"NOTE: TNNLS E19 TokenLearner = 5.10 CIDEr (1 seed) -- huge discrepancy with tab:main 45.09. INVESTIGATE before reporting."
+C-ARCH-01,tab:arch / sec4.1,CNN model total params,21.27 M,n/a,measured sum(p.numel()) 2026-05-28,VERIFIED,enc 8.97M + decoder 11.99M + proj 0.30M + ce 0.003M
+C-ARCH-02,tab:arch,CNN 3-branch encoder params,8.97 M,n/a,measured 2026-05-28,VERIFIED,Tiny 0.20 + Small 1.90 + Medium 6.88
+C-ARCH-03,tab:arch,CLIP trainable params,12.72 M,n/a,measured 2026-05-28,VERIFIED,+ ~87.8M frozen ViT-B/32 visual (published)
+C-EDGE-01,tab:ondevice,SD888 STTF+ANC CNN latency,24.31 ms,n/a,qai_hub_results/jobs.json,VERIFIED,measured AI Hub; estimated_inference_time us->ms; routing-weighted (0.31/0.34/0.35)
+C-EDGE-02,tab:ondevice,SD888 dense/full latency,41.59 ms,n/a,qai_hub_results/jobs.json,VERIFIED,1.71x reduction vs STTF+ANC
+C-EDGE-03,tab:ondevice,SD888 peak mem STTF+ANC,178.4 MB,n/a,qai_hub_results/jobs.json,VERIFIED,estimated_inference_peak_memory bytes->MB; 8pct drop vs 194.1
+C-EDGE-04,tab:ondevice,X Elite STTF+ANC latency,1.17 ms,n/a,qai_hub_results/jobs.json,VERIFIED,1.13x reduction
+C-EDGE-05,sec4.1,inference peak GPU mem (RTX5090),389.6 MB,n/a,tnnls_results/E18/cache_mem.json,VERIFIED,3.51 ms/frame, tau=0.80 batch=1 224x224
+C-NEG-01,sec5 (to add),ANC routing collapse at inference (COCO),100pct one branch,n/a,tnnls_results/E8/decision_cnn.json,VERIFIED_NEGATIVE,complexity_estimator constant (zero-event COCO); std=0 per branch
+C-NEG-02,sec5 (to add),Dense Small > STTF+ANC on COCO,+6.08 CIDEr (42.10 vs 36.02),3,tnnls_results/E7/aggregate.json,VERIFIED_NEGATIVE,"Cohen d=2.57, Welch p=0.084 (marginal, not sig at 0.05); seed_43 outlier 45.93"
+C-NEG-03,sec5 (to add),lambda_flops bimodal collapse (no Pareto),l=0.01->Small(8G,38.79); l>=0.05->Tiny(2G,~27),1,tnnls_results/E15/aggregate.json,VERIFIED_NEGATIVE,single-seed exploratory; closes T4
+C-NEG-04,sec5,hard routing > soft routing CIDEr,+2.55 (36.16 vs 33.61),1,tnnls_results/E9/aggregate.json,VERIFIED,seed42 only; hard=Medium-alone beats soft 3-branch average
+C-POS-01,sec5,STTF+ANC vs TokenLearner gap (TNNLS eval),+30.9 CIDEr (36.02 vs 5.10),3 vs 1,tnnls_results/E19/aggregate.json,VERIFIED,"CONFLICTS with tab:main TokenLearner 45.09 -- resolve C-MAIN-07 first"
+C-SPLIT-01,sec4.1 L236/L241,COCO Karpathy split (113k/5k/5k),CLAIM,n/a,tinyvlm_vast.py build_datasets L1184-1208,FALSE,"actual = seeded random_split val_fraction=0.05 of train2017 annotations; no Karpathy, no test, image-level leakage. Must fix (TNNLS_DATA_PROTOCOL)."
