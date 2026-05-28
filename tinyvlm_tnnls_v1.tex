@@ -346,31 +346,30 @@ The no-routing ablation (CLIP + single 384-$d$ MLP head, no ANC router) achieves
 
 \begin{table}[htbp]
 \centering
-\caption{Comparison on MS-COCO captioning. \emph{CNN}: 21M-parameter scratch-trained backbone, 10 epochs; \emph{CLIP}: frozen ViT-B/32 + MLP projection heads, 15 epochs. STTF+ANC (CNN) and STTF+ANC (CLIP) results are mean~$\pm$~std over seeds \{42,~43,~44\}; 95\% CI computed via $t_{0.025,\,df=2}=4.303$. Superscripts indicate one-sample $t$-tests ($^{**}p<0.01$, $^{***}p<0.001$) against the CNN STTF+ANC result. METEOR is reported for CLIP variants only (computed via \texttt{nltk} corpus METEOR); ``---'' indicates not computed for CNN baselines. FLOPs for STTF+ANC (CNN) are the hard-routing average at inference: $0.31{\times}2 + 0.34{\times}8 + 0.35{\times}20 \approx 10.3$~GFLOPs.}
+\caption{Comparison on MS-COCO captioning. \emph{CNN}: 21M-parameter scratch-trained backbone, 10 epochs; \emph{CLIP}: frozen ViT-B/32 + MLP projection heads, 15 epochs. STTF+ANC (CNN) and STTF+ANC (CLIP) results are mean~$\pm$~std over seeds \{42,~43,~44\}; 95\% CI computed via $t_{0.025,\,df=2}=4.303$. Superscripts indicate one-sample $t$-tests ($^{**}p<0.01$, $^{***}p<0.001$) against the CNN STTF+ANC result. METEOR is reported for CLIP variants only (computed via \texttt{nltk} corpus METEOR); ``---'' indicates not computed for CNN baselines. FLOPs for STTF+ANC (CNN) are the hard-routing average at inference: $0.31{\times}2 + 0.34{\times}8 + 0.35{\times}20 \approx 10.3$~GFLOPs. On-device latency is reported separately in Table~\ref{tab:ondevice} (measured via Qualcomm AI~Hub); we do not report unmeasured per-method latency estimates here.}
 \label{tab:main}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccccc}
 \toprule
-Method & Enc.\ FLOPs & Val Acc (\%) $\uparrow$ & CIDEr $\uparrow$ & BLEU-4 $\uparrow$ & METEOR $\uparrow$ & Latency (ms) $\downarrow$ \\
+Method & Enc.\ FLOPs & Val Acc (\%) $\uparrow$ & CIDEr $\uparrow$ & BLEU-4 $\uparrow$ & METEOR $\uparrow$ \\
 \midrule
-Dense (fixed MediumEnc.) & 20 G & 37.2 $\pm$ 0.5 & 34.1$^{**}$ & 13.2 & --- & 32.5 \\
-ToMe~\cite{bolya2023tome} & 20 G & 35.8 $\pm$ 0.5 & 32.9$^{**}$ & 12.8 & --- & 24.1 \\
-EViT~\cite{liang2022evit} & 20 G & 35.1 $\pm$ 0.6 & 32.3$^{**}$ & 12.6 & --- & 25.6 \\
-DynamicViT~\cite{rao2021dynamicvit} & 20 G & 35.5 $\pm$ 0.5 & 32.6$^{**}$ & 12.7 & --- & 23.9 \\
-TokenLearner~\cite{ryoo2021tokenlearner} & 20 G & 46.76 & 45.09$^{***}$$^\dagger$ & 15.74 & --- & 21.5 \\
+Dense (fixed MediumEnc.) & 20 G & 37.2 $\pm$ 0.5 & 34.1$^{**}$ & 13.2 & --- \\
+ToMe~\cite{bolya2023tome} & 20 G & 35.8 $\pm$ 0.5 & 32.9$^{**}$ & 12.8 & --- \\
+EViT~\cite{liang2022evit} & 20 G & 35.1 $\pm$ 0.6 & 32.3$^{**}$ & 12.6 & --- \\
+DynamicViT~\cite{rao2021dynamicvit} & 20 G & 35.5 $\pm$ 0.5 & 32.6$^{**}$ & 12.7 & --- \\
+TokenLearner~\cite{ryoo2021tokenlearner} & 20 G & 46.76 & 45.09$^{***}$$^\dagger$ & 15.74 & --- \\
 \midrule
-STTF only & 20 G & 36.1 $\pm$ 0.4 & 33.1 & 12.9 & --- & 20.8 \\
-ANC only & $\sim$10 G & 35.8 $\pm$ 0.4 & 32.8 & 12.8 & --- & 21.5 \\
-\textbf{STTF + ANC (Ours, CNN)} & $\sim$\textbf{10 G} & \textbf{45.89 $\pm$ 0.05} & \textbf{36.70 $\pm$ 0.37} & \textbf{14.20 $\pm$ 0.14} & --- & \textbf{18.9} \\
- & & & \multicolumn{2}{l}{\small [95\% CI: 35.78,\,37.62]} & & \\
+STTF only & 20 G & 36.1 $\pm$ 0.4 & 33.1 & 12.9 & --- \\
+ANC only & $\sim$10 G & 35.8 $\pm$ 0.4 & 32.8 & 12.8 & --- \\
+\textbf{STTF + ANC (Ours, CNN)} & $\sim$\textbf{10 G} & \textbf{45.89 $\pm$ 0.05} & \textbf{36.70 $\pm$ 0.37} & \textbf{14.20 $\pm$ 0.14} & --- \\
+ & & & \multicolumn{2}{l}{\small [95\% CI: 35.78,\,37.62]} & \\
 \midrule
-CLIP + no routing (iso-backbone)$^\ddagger$ & $\sim$17.6 G & 51.38 & 81.34 & 25.86 & 48.03 & 99.4$^\S$ \\
-\textbf{STTF + ANC (Ours, CLIP)} & $\sim$\textbf{17.6 G} & \textbf{51.43 $\pm$ 0.06} & \textbf{82.24 $\pm$ 1.39} & \textbf{26.26 $\pm$ 0.43} & \textbf{48.49 $\pm$ 0.16} & \textbf{98.0}$^\S$ \\
- & & & \multicolumn{2}{l}{\small [95\% CI: 78.78,\,85.70]} & & \\
+CLIP + no routing (iso-backbone)$^\ddagger$ & $\sim$17.6 G & 51.38 & 81.34 & 25.86 & 48.03 \\
+\textbf{STTF + ANC (Ours, CLIP)} & $\sim$\textbf{17.6 G} & \textbf{51.43 $\pm$ 0.06} & \textbf{82.24 $\pm$ 1.39} & \textbf{26.26 $\pm$ 0.43} & \textbf{48.49 $\pm$ 0.16} \\
+ & & & \multicolumn{2}{l}{\small [95\% CI: 78.78,\,85.70]} & \\
 \midrule
-\multicolumn{3}{l}{\small Trade-off vs TokenLearner ($^\dagger$STTF+ANC CNN $<$ baseline):} & \small $-$8.4 CIDEr & & & \small $-$50\% FLOPs, $-$17.3~ms \\
-\multicolumn{3}{l}{\small $^\ddagger$Frozen CLIP + single 384-$d$ MLP head, no router (seed 42).} & \small ANC gain: $+$0.90 CIDEr & & & \\
-\multicolumn{7}{l}{\small $^\S$AI Hub measurement on Snapdragon~888 (Galaxy~S21); CLIP+ANC routing-weighted across branches. See Table~\ref{tab:ondevice}.} \\
+\multicolumn{3}{l}{\small Trade-off vs TokenLearner ($^\dagger$STTF+ANC CNN $<$ baseline):} & \small $-$8.4 CIDEr & & \small $-$50\% FLOPs \\
+\multicolumn{3}{l}{\small $^\ddagger$Frozen CLIP + single 384-$d$ MLP head, no router (seed 42).} & \small ANC gain: $+$0.90 CIDEr & & \\
 \bottomrule
 \end{tabular}%
 }
@@ -684,8 +683,7 @@ Backbone & Component & Layers / dim & Params (M) \\
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\newpage
-\input{checklist.tex}
+% NeurIPS reproducibility/ethics checklist removed for TNNLS submission (journal does not require it).
 
 
 \end{document}
