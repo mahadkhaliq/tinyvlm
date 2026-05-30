@@ -9,3 +9,4 @@ nltk
 matplotlib
 scipy
 tqdm
+tonic
