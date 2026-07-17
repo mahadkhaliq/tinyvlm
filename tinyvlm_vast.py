@@ -127,6 +127,14 @@ class Config:
     coco_imgs: str = "/workspace/coco/train2017"
     coco_anns: str = "/workspace/coco/annotations/captions_train2017.json"
     val_fraction: float = 0.05
+    # Karpathy split (disjoint train/val/test by image). When karpathy_json points
+    # at dataset_coco.json, build_datasets uses the official Karpathy partition
+    # instead of the caption-level random_split (which leaked ~22% of val images
+    # into train). karpathy_eval_split selects which split becomes the "val" set
+    # the trainer / --eval_only reports on: "val" during training, "test" for the
+    # final held-out number.
+    karpathy_json: str = ""
+    karpathy_eval_split: str = "val"
     max_length: int = 64
     vocab_size: int = 8192
     smoke_test: bool = False
@@ -932,6 +940,60 @@ class _TokenLearnerModule(nn.Module):
         return tokens
 
 
+class CLIPDenseBaseline(nn.Module):
+    """FLOPs-matched dense control for the CLIP-backbone model.
+
+    CLIP ViT-B/32 stem -> a single fixed-capacity head (512->384, matching the
+    ANC "medium" branch) -> projection -> ConditionalTransformer decoder. No
+    router and no complexity estimator: every image uses the same head, which
+    isolates the contribution of *adaptive routing* from the shared CLIP backbone
+    and decoder. This is the CLIP-backbone counterpart to DenseEncoderBaseline
+    (which is CNN-only).
+
+    Returns the same 4-tuple as DenseEncoderBaseline / AdaptiveNeuralCompression
+    (token_logits, comp_cost, router_logits, router_weights) so the training and
+    eval loops need no special-casing.
+    """
+
+    HEAD_DIM: int = 384  # matches Config.medium_dim / the ANC "medium" head
+
+    def __init__(self, cfg: Config) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.clip_stem = CLIPStemEncoder(cfg.clip_model, cfg.clip_pretrained)
+        clip_dim = CLIPStemEncoder.OUT_DIM  # 512
+        self.head = nn.Sequential(
+            nn.Linear(clip_dim, self.HEAD_DIM),
+            nn.GELU(),
+            nn.Dropout(cfg.dropout),
+        )
+        self.proj = nn.Linear(self.HEAD_DIM, cfg.hidden_dim)
+        self.decoder = ConditionalTransformer(
+            dim=cfg.hidden_dim,
+            vocab_size=cfg.vocab_size,
+            max_length=cfg.max_length,
+            nhead=cfg.num_heads,
+            num_layers=cfg.num_decoder_layers,
+            dropout=cfg.dropout,
+        )
+        # Fixed compute: shared CLIP stem FLOPs + the single head's MLP FLOPs.
+        self._flops = CLIPStemEncoder.FLOPS + self.HEAD_DIM * clip_dim * 2
+
+    def forward(
+        self, rgb: torch.Tensor, events: torch.Tensor, text_tokens: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        clip_feat = self.clip_stem(rgb)            # [B, 512]
+        feat = self.head(clip_feat)                # [B, 384]
+        encoded = self.proj(feat)                  # [B, hidden_dim]
+        token_logits = self.decoder(encoded, text_tokens)
+
+        B = encoded.shape[0]
+        comp_cost = torch.full((B,), float(self._flops), device=encoded.device)
+        router_logits = torch.zeros(B, 1, device=encoded.device)
+        router_weights = torch.ones(B, 1, device=encoded.device)
+        return token_logits, comp_cost, router_logits, router_weights
+
+
 class TokenLearnerBaseline(nn.Module):
     """Baseline model replacing STTF+ANC with learned spatial token selection.
 
@@ -1158,6 +1220,170 @@ class CocoCaptionDataset(Dataset):
         raise RuntimeError(f"No valid images found starting from idx={idx}")
 
 
+class CocoKarpathyDataset(Dataset):
+    """COCO captions under the Karpathy split (disjoint train/val/test by IMAGE).
+
+    Reads dataset_coco.json (Karpathy "caption datasets" release). Each image
+    entry carries a ``split`` in {train, restval, val, test}, a stable integer
+    ``cocoid``, and its reference ``sentences``. Karpathy filenames follow the
+    COCO-2014 convention; we map to the COCO-2017 layout by cocoid (zero-padded
+    12-digit ``.jpg``) and resolve across train2017/ and val2017/, since the 2017
+    repartition scatters Karpathy val/test images across both dirs.
+
+    Split semantics (standard Karpathy captioning protocol):
+      - "train": split in {train, restval} -> one sample per (image, caption)
+      - "val" / "test": that split only    -> one sample per IMAGE (loss uses the
+        first caption; ``get_image_captions`` returns all references for CIDEr).
+
+    Unlike the legacy caption-level ``random_split``, no image appears in more
+    than one split, so val/test CIDEr is a true held-out measurement.
+    """
+
+    def __init__(
+        self,
+        images_root: str,
+        karpathy_json: str,
+        split: str,
+        max_length: int = 64,
+        vocab: Optional["Vocabulary"] = None,
+        clip_preprocess: Optional[Callable] = None,
+        gpt2_tokenizer: Optional[Any] = None,
+    ) -> None:
+        if not _PIL_AVAILABLE:
+            raise RuntimeError("Pillow is not installed. Run `pip install pillow`.")
+        if not Path(karpathy_json).exists():
+            raise FileNotFoundError(f"Karpathy split json not found: {karpathy_json}")
+        from torchvision import transforms  # local import: only needed for COCO
+
+        self.max_length = max_length
+        self.vocab = vocab
+        self.gpt2_tokenizer = gpt2_tokenizer
+        self.split = split
+
+        # Accept either the train2017 dir (legacy --coco_imgs) or the dataset
+        # root; search both 2017 subdirs so any cocoid resolves regardless of
+        # which 2017 partition it landed in.
+        root = Path(images_root)
+        if root.name in ("train2017", "val2017"):
+            parent = root.parent
+            candidates = [parent / "train2017", parent / "val2017", parent, root]
+        else:
+            candidates = [root / "train2017", root / "val2017", root]
+        # de-dup while preserving order
+        seen: set = set()
+        self._roots: List[Path] = []
+        for p in candidates:
+            if p not in seen and p.exists():
+                seen.add(p)
+                self._roots.append(p)
+        if not self._roots:
+            raise FileNotFoundError(
+                f"No COCO-2017 image dirs found near {images_root} "
+                f"(looked for train2017/ and val2017/)."
+            )
+
+        with open(karpathy_json, "r") as f:
+            data = json.load(f)
+
+        want_train = split == "train"
+        train_splits = {"train", "restval"}
+        self.samples: List[Tuple[int, str]] = []        # (cocoid, caption)
+        self.refs_by_cocoid: Dict[int, List[str]] = {}
+        for img in data["images"]:
+            sp = img["split"]
+            in_split = (sp in train_splits) if want_train else (sp == split)
+            if not in_split:
+                continue
+            cocoid = int(img["cocoid"])
+            caps = [s["raw"].strip() for s in img.get("sentences", [])]
+            self.refs_by_cocoid[cocoid] = caps
+            if want_train:
+                for c in caps:
+                    self.samples.append((cocoid, c))
+            else:
+                self.samples.append((cocoid, caps[0] if caps else ""))
+
+        if not self.samples:
+            raise RuntimeError(
+                f"Karpathy split '{split}' produced 0 samples from {karpathy_json}"
+            )
+        logger.info(
+            "Karpathy split '%s': %d images, %d samples (roots: %s)",
+            split, len(self.refs_by_cocoid), len(self.samples),
+            ", ".join(str(r) for r in self._roots),
+        )
+
+        if clip_preprocess is not None:
+            self.transform = clip_preprocess
+        else:
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    ),
+                ]
+            )
+        self._path_cache: Dict[int, str] = {}
+
+    def _resolve_path(self, cocoid: int) -> Optional[str]:
+        cached = self._path_cache.get(cocoid)
+        if cached is not None:
+            return cached
+        fname = f"{cocoid:012d}.jpg"
+        for r in self._roots:
+            p = r / fname
+            if p.exists():
+                self._path_cache[cocoid] = str(p)
+                return str(p)
+        return None
+
+    def all_captions(self) -> List[str]:
+        return [c for _, c in self.samples]
+
+    def get_image_captions(self, idx: int) -> Tuple[int, List[str]]:
+        """Returns (cocoid, all reference captions) — contract matches
+        CocoCaptionDataset so the CIDEr eval path is unchanged."""
+        cocoid, _ = self.samples[idx]
+        return cocoid, self.refs_by_cocoid.get(cocoid, [])
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        for attempt in range(len(self.samples)):
+            cur = (idx + attempt) % len(self.samples)
+            cocoid, caption = self.samples[cur]
+            path = self._resolve_path(cocoid)
+            if path is None:
+                continue
+            try:
+                img = Image.open(path).convert("RGB")
+                img = self.transform(img)
+            except Exception:
+                continue
+            if self.gpt2_tokenizer is not None:
+                enc = self.gpt2_tokenizer(
+                    caption,
+                    max_length=self.max_length,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                )
+                token_ids = enc.input_ids.squeeze(0)
+            elif self.vocab is not None:
+                token_ids = self.vocab.encode(caption, self.max_length)
+            else:
+                token_ids = simple_tokenize(caption, self.max_length)
+            events = torch.zeros(2, img.shape[1] // 4, img.shape[2] // 4)
+            return img, events, token_ids
+        raise RuntimeError(f"No resolvable Karpathy images starting from idx={idx}")
+
+
 class SyntheticDataset(Dataset):
     """Deterministic synthetic data for smoke tests; no COCO required."""
 
@@ -1194,6 +1420,29 @@ def build_datasets(
             max_length=cfg.max_length,
             vocab_size=cfg.vocab_size if not cfg.gpt2_decoder else GPT2CaptionDecoder.VOCAB_SIZE,
         )
+    elif cfg.karpathy_json:
+        # Disjoint Karpathy split: separate datasets per split, no random_split,
+        # no cross-split image leakage. The "val" set is whichever split
+        # karpathy_eval_split names ("val" while training, "test" for the final
+        # held-out number via --eval_only).
+        logger.info(
+            "Karpathy split from %s (train + %s)", cfg.karpathy_json, cfg.karpathy_eval_split
+        )
+        train_set = CocoKarpathyDataset(
+            cfg.coco_imgs, cfg.karpathy_json, "train", cfg.max_length,
+            vocab=vocab, clip_preprocess=clip_preprocess,
+            gpt2_tokenizer=gpt2_tokenizer,
+        )
+        val_set = CocoKarpathyDataset(
+            cfg.coco_imgs, cfg.karpathy_json, cfg.karpathy_eval_split, cfg.max_length,
+            vocab=vocab, clip_preprocess=clip_preprocess,
+            gpt2_tokenizer=gpt2_tokenizer,
+        )
+        logger.info(
+            "Dataset (Karpathy): %d train / %d %s",
+            len(train_set), len(val_set), cfg.karpathy_eval_split,
+        )
+        return train_set, val_set
     else:
         logger.info("Loading COCO from %s", cfg.coco_imgs)
         full = CocoCaptionDataset(
@@ -1528,8 +1777,10 @@ class Trainer:
             ).to(self.device)
         elif cfg.baseline == "dense":
             if cfg.clip_backbone:
-                raise ValueError("--baseline dense currently supports CNN encoders only")
-            self.model = DenseEncoderBaseline(cfg).to(self.device)
+                # CLIP-backbone dense control: single fixed head, no router.
+                self.model = CLIPDenseBaseline(cfg).to(self.device)
+            else:
+                self.model = DenseEncoderBaseline(cfg).to(self.device)
         else:
             self.model = AdaptiveNeuralCompression(cfg).to(self.device)
 
@@ -2211,6 +2462,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--vocab_size", type=int, default=default.vocab_size)
     p.add_argument("--smoke_test", action="store_true")
     p.add_argument("--smoke_test_size", type=int, default=default.smoke_test_size)
+    p.add_argument("--karpathy_json", type=str, default=default.karpathy_json,
+                   help="Path to Karpathy dataset_coco.json; enables the disjoint "
+                        "train/val/test split (replaces the leaky caption-level "
+                        "random_split). Requires train2017/ and val2017/ images.")
+    p.add_argument("--karpathy_eval_split", type=str, default=default.karpathy_eval_split,
+                   choices=["val", "test"],
+                   help="Which Karpathy split the trainer / --eval_only reports on "
+                        "(val while training, test for the final held-out number).")
 
     # Model
     p.add_argument("--dropout", type=float, default=default.dropout)
@@ -2288,6 +2547,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         coco_imgs=args.coco_imgs,
         coco_anns=args.coco_anns,
         val_fraction=args.val_fraction,
+        karpathy_json=args.karpathy_json,
+        karpathy_eval_split=args.karpathy_eval_split,
         max_length=args.max_length,
         vocab_size=args.vocab_size,
         smoke_test=args.smoke_test,
