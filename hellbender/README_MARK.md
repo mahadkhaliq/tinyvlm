@@ -19,20 +19,23 @@ model code.** E21 is the one that matters most; run it first.
 
 ```bash
 cd $SCRATCH
-git clone <repo>  tinyvlm          # or rsync your existing copy
+git clone https://github.com/mahadkhaliq/tinyvlm.git
 cd tinyvlm
-bash tinyvlm/hellbender_setup.sh   # conda env `tinyvlm` + COCO -> $SCRATCH/coco
+bash hellbender_setup.sh           # conda env `tinyvlm` + COCO -> $SCRATCH/coco
 ```
 
-**The phase-2 code you need lives at `vast/phase2/`** (root of the repo, not the nested `tinyvlm/`
-workspace). Despite the directory name it is not vast-specific — it is just the training script.
-Everything below runs from `vast/phase2/`.
+Everything is on **`main`** as of 2026-07-16 — the phase-2 code used to live outside version
+control, so an older clone will not have it. If you already have a checkout, `git pull` first.
+
+**The code you need is at `vast/phase2/`** (repo root). Despite the directory name it is not
+vast-specific — it is just the training script. Submit all jobs from the repo root; the SLURM
+scripts `cd` into `vast/phase2/` themselves.
 
 Sanity check before you submit anything:
 
 ```bash
-cd $SCRATCH/tinyvlm/vast/phase2
-python clip_token_budget.py        # smoke test: prints bit-identity diff 0.0
+cd $SCRATCH/tinyvlm/vast/phase2 && python clip_token_budget.py   # prints bit-identity diff 0.0
+cd $SCRATCH/tinyvlm                                              # submit from the root
 ```
 
 ---
