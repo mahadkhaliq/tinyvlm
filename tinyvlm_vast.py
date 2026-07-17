@@ -196,6 +196,10 @@ class Config:
     encoder_only: str = "medium"    # dense baseline encoder: "tiny", "small", or "medium"
     tokenlearner_num_tokens: int = 8  # number of learned tokens S
 
+    # --- Ablations ---
+    no_anc: bool = False  # S5: single fixed encoder, no routing (iso-backbone ablation)
+    eval_only: bool = False  # S1: load checkpoint, eval once, exit (no training)
+
     # --- Evaluation ---
     eval_cider_freq: int = 5   # compute CIDEr/BLEU-4 every N epochs (0 = final only)
     eval_routing_mode: str = "hard"  # "hard" = deployed argmax, "soft" = train-time weighted routing
@@ -506,6 +510,21 @@ def compute_caption_metrics(
     except Exception as e:
         logger.warning("BLEU-4 via nltk failed (%s); skipping BLEU-4.", e)
 
+    # ── METEOR via nltk (pure Python, no Java required) ──────────────────────
+    try:
+        from nltk.translate.meteor_score import meteor_score as _nltk_meteor  # type: ignore
+        import nltk  # type: ignore
+
+        nltk.download("wordnet", quiet=True)
+        nltk.download("omw-1.4", quiet=True)
+        scores = [
+            _nltk_meteor([ref.split() for ref in refs], hyp.split())
+            for refs, hyp in zip(references, hypotheses)
+        ]
+        results["meteor"] = float(sum(scores) / len(scores)) * 100
+    except Exception as e:
+        logger.warning("METEOR via nltk failed (%s); skipping METEOR.", e)
+
     return results
 
 
@@ -707,30 +726,39 @@ class AdaptiveNeuralCompression(nn.Module):
         if cfg.clip_backbone:
             self.clip_stem = CLIPStemEncoder(cfg.clip_model, cfg.clip_pretrained)
             clip_dim = CLIPStemEncoder.OUT_DIM  # 512
-            # Three heterogeneous MLP heads operating on CLIP features.
-            # Capacity difference comes from hidden width, preserving routing incentive.
-            self.encoders = nn.ModuleList([
-                nn.Sequential(nn.Linear(clip_dim, 128), nn.GELU(), nn.Dropout(cfg.dropout)),
-                nn.Sequential(nn.Linear(clip_dim, 256), nn.GELU(), nn.Dropout(cfg.dropout)),
-                nn.Sequential(nn.Linear(clip_dim, 384), nn.GELU(), nn.Dropout(cfg.dropout)),
-            ])
-            # Approximate FLOPs for each MLP head (clip stem FLOPs shared, so only
-            # head FLOPs differ; we report clip_stem FLOPs + head FLOPs for comp_cost).
-            self._head_flops = [
-                CLIPStemEncoder.FLOPS + 128 * clip_dim * 2,
-                CLIPStemEncoder.FLOPS + 256 * clip_dim * 2,
-                CLIPStemEncoder.FLOPS + 384 * clip_dim * 2,
-            ]
-            head_dims = [128, 256, 384]
-            self.projections = nn.ModuleList([
-                nn.Linear(d, cfg.hidden_dim) for d in head_dims
-            ])
-            # Complexity estimator operates on the 512-d CLIP CLS token.
-            self.complexity_estimator = nn.Sequential(
-                nn.Linear(clip_dim, 64),
-                nn.GELU(),
-                nn.Linear(64, len(self.encoders)),
-            )
+
+            if cfg.no_anc:
+                # Single fixed 384-d MLP projection, no router — S5 iso-backbone ablation.
+                self.encoders = nn.ModuleList([
+                    nn.Sequential(nn.Linear(clip_dim, cfg.hidden_dim), nn.GELU(), nn.Dropout(cfg.dropout))
+                ])
+                self.projections = nn.ModuleList([nn.Linear(cfg.hidden_dim, cfg.hidden_dim)])
+                self._head_flops = [CLIPStemEncoder.FLOPS]
+                self.complexity_estimator = None
+            else:
+                # Three heterogeneous MLP heads operating on CLIP features.
+                # Capacity difference comes from hidden width, preserving routing incentive.
+                self.encoders = nn.ModuleList([
+                    nn.Sequential(nn.Linear(clip_dim, 128), nn.GELU(), nn.Dropout(cfg.dropout)),
+                    nn.Sequential(nn.Linear(clip_dim, 256), nn.GELU(), nn.Dropout(cfg.dropout)),
+                    nn.Sequential(nn.Linear(clip_dim, 384), nn.GELU(), nn.Dropout(cfg.dropout)),
+                ])
+                # Approximate FLOPs for each MLP head (clip stem FLOPs shared).
+                self._head_flops = [
+                    CLIPStemEncoder.FLOPS + 128 * clip_dim * 2,
+                    CLIPStemEncoder.FLOPS + 256 * clip_dim * 2,
+                    CLIPStemEncoder.FLOPS + 384 * clip_dim * 2,
+                ]
+                head_dims = [128, 256, 384]
+                self.projections = nn.ModuleList([
+                    nn.Linear(d, cfg.hidden_dim) for d in head_dims
+                ])
+                # Complexity estimator operates on the 512-d CLIP CLS token.
+                self.complexity_estimator = nn.Sequential(
+                    nn.Linear(clip_dim, 64),
+                    nn.GELU(),
+                    nn.Linear(64, len(self.encoders)),
+                )
         else:
             self.encoders = nn.ModuleList(
                 [
@@ -756,7 +784,9 @@ class AdaptiveNeuralCompression(nn.Module):
             )
             self._head_flops = [enc.flops for enc in self.encoders]
 
-        self.router = GumbelSoftmaxRouter(temperature=cfg.router_temperature)
+        self.router: Optional[GumbelSoftmaxRouter] = (
+            None if cfg.no_anc else GumbelSoftmaxRouter(temperature=cfg.router_temperature)
+        )
 
         if cfg.gpt2_decoder:
             self.prefix_adapter: Optional[VisualPrefixAdapter] = VisualPrefixAdapter(
@@ -783,6 +813,22 @@ class AdaptiveNeuralCompression(nn.Module):
     def forward(
         self, rgb: torch.Tensor, events: torch.Tensor, text_tokens: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        B = rgb.size(0)
+
+        # ── no_anc: bypass router entirely, use single fixed encoder ─────────
+        if self.cfg.no_anc:
+            clip_feat = self.clip_stem(rgb)               # [B, 512]
+            feat = self.encoders[0](clip_feat)
+            encoded = self.projections[0](feat)
+            comp_cost = torch.full((B,), self._head_flops[0], device=rgb.device)
+            router_logits = torch.zeros(B, 1, device=rgb.device)
+            weights = torch.ones(B, 1, device=rgb.device)
+            if self.prefix_adapter is not None:
+                token_logits = self.decoder(self.prefix_adapter(encoded), text_tokens)
+            else:
+                token_logits = self.decoder(encoded, text_tokens)
+            return token_logits, comp_cost, router_logits, weights
+
         if self.clip_stem is not None:
             # CLIP stem: produces [B, 512] CLS token (frozen, no grad).
             clip_feat = self.clip_stem(rgb)               # [B, 512]
@@ -791,8 +837,6 @@ class AdaptiveNeuralCompression(nn.Module):
         else:
             router_logits = self.complexity_estimator(events)
             weights = self.router(router_logits)
-
-        B = rgb.size(0)
         encoded = torch.zeros(B, self.cfg.hidden_dim, device=rgb.device)
         comp_cost = torch.zeros(B, device=rgb.device)
 
@@ -1778,6 +1822,9 @@ class Trainer:
         elif cfg.baseline == "dense":
             if cfg.clip_backbone:
                 # CLIP-backbone dense control: single fixed head, no router.
+                # NB main's branch raised here ("CNN encoders only"); we keep the CLIP path
+                # because it IS the matched dense control behind the paper's headline null
+                # (CIDEr 79.80 +/- 1.51 vs routed 79.43 +/- 0.36, Welch p=0.72).
                 self.model = CLIPDenseBaseline(cfg).to(self.device)
             else:
                 self.model = DenseEncoderBaseline(cfg).to(self.device)
@@ -1872,6 +1919,7 @@ class Trainer:
 
         self.start_epoch = 0
         self.best_val_loss = float("inf")
+        self.best_cider = 0.0
         if cfg.resume:
             self._maybe_resume()
 
@@ -2196,6 +2244,13 @@ class Trainer:
             )
 
     def train(self) -> Dict[str, Any]:
+        # NOTE: --eval_only is NOT handled here. main() dispatches it to run_eval_only(),
+        # which is single-process (no DDP) and writes eval_only_summary.json -- the artifact
+        # RUNS.md and the paper's A4 Spearman values are read from. An earlier branch also had
+        # an inline early-return here that wrote eval_only_results.json; it was unreachable and
+        # nothing consumed that file, so it was dropped in the merge rather than left as a
+        # second mechanism for the same flag producing a differently-named artifact.
+
         if self.is_main:
             logger.info("Starting training from epoch %d", self.start_epoch)
         for epoch in range(self.start_epoch, self.cfg.epochs):
@@ -2208,17 +2263,27 @@ class Trainer:
             self._log_epoch(epoch, "val", val_metrics, time.time() - t0)
 
             # Caption metrics every eval_cider_freq epochs (rank 0 only).
+            caption_metrics: Dict[str, float] = {}
             freq = self.cfg.eval_cider_freq
             if freq > 0 and (epoch + 1) % freq == 0:
                 caption_metrics = self._evaluate_captions(epoch)
                 if caption_metrics:
                     self._log_epoch(epoch, "caption", caption_metrics, 0.0)
 
-            # Early stopping decision is made on rank 0 and broadcast to all.
+            # Early stopping + best-checkpoint decision (rank 0).
+            # GPT-2 mode: best.pt tracks peak CIDEr; early stopping still on val loss.
+            # Default mode: both track val loss (unchanged behaviour).
             if self.is_main:
-                improved = self.early_stop.step(val_metrics["loss"])
-                if improved:
-                    self.best_val_loss = val_metrics["loss"]
+                cider_now = caption_metrics.get("cider") if caption_metrics else None
+                if self.cfg.gpt2_decoder and cider_now is not None:
+                    improved = float(cider_now) > self.best_cider
+                    if improved:
+                        self.best_cider = float(cider_now)
+                    self.early_stop.step(val_metrics["loss"])
+                else:
+                    improved = self.early_stop.step(val_metrics["loss"])
+                    if improved:
+                        self.best_val_loss = val_metrics["loss"]
             else:
                 improved = False
 
@@ -2530,6 +2595,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--eval_routing_mode", type=str, default=default.eval_routing_mode,
                    choices=["hard", "soft"],
                    help="Routing mode used during eval/inference for STTF+ANC")
+    p.add_argument("--no_anc", action="store_true",
+                   help="S5 ablation: single fixed encoder, no routing (requires --clip_backbone)")
     p.add_argument("--no_onnx", action="store_true")
     p.add_argument("--no_tensorboard", action="store_true")
     p.add_argument("--log_level", type=str, default=default.log_level)
@@ -2585,6 +2652,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         gpt2_n_prefix=args.gpt2_n_prefix,
         eval_cider_freq=args.eval_cider_freq,
         eval_routing_mode=args.eval_routing_mode,
+        no_anc=args.no_anc,
+        eval_only=args.eval_only,
         export_onnx=not args.no_onnx,
         tensorboard=not args.no_tensorboard,
         log_level=args.log_level,
